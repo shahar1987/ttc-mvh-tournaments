@@ -1,6 +1,19 @@
-// להוסיף בתוך match /databases/{database}/documents { ... } בקונסולת Firebase (Firestore → Rules), ליד הכללים הקיימים:
+כלל ההרשאה לאפליקציית התחרויות
+================================
+בקונסולת Firebase של הפרויקט ttcmh-2a752:
+Firestore Database  ⟵  לשונית Rules
+
+להוסיף את השורות הבאות בתוך הבלוק הקיים
+match /databases/{database}/documents {  ...  }
+לצד הכללים שכבר קיימים שם (אין למחוק כלום), ואז ללחוץ Publish.
+
 
     match /tournaments/{id} {
-      allow read, write: if request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      allow read, write: if request.auth != null;
     }
+
+
+המשמעות: רק משתמש מחובר (אותם משתמשים של אפליקציית הנוכחות)
+יכול לקרוא ולכתוב תחרויות. משתמש לא מחובר לא יכול לגעת בכלום.
+
+לבדיקה שהכל עובד: באפליקציה, לוחצים על מחוון הסנכרון בפינה העליונה.

@@ -95,7 +95,10 @@ header{
 .brand .tname{font-family:"Rubik",sans-serif;font-weight:300;opacity:.8;font-size:.6em}
 header button.ghost{color:var(--chalk);padding:8px 12px;min-height:38px}
 header button.ghost:hover{background:rgba(255,255,255,.12)}
-#syncDot{transition:background .3s var(--ease)}
+#syncDot{width:9px;height:9px;border-radius:50%;background:#9AA6A0;display:inline-block;flex:none;transition:background .3s var(--ease)}
+button.sync{display:inline-flex;align-items:center;gap:7px;font-size:.82em;padding:7px 12px;min-height:36px;opacity:.85}
+button.sync.bad{background:rgba(255,107,90,.18);opacity:1}
+button.sync.bad #syncDot{animation:idleBlink 1.6s infinite}
 .steps{display:flex;gap:2px;margin-top:12px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .steps::-webkit-scrollbar{display:none}
 .step{
@@ -437,7 +440,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
   <div class="brand">
     <div class="logo"><i></i> תן לי שולחן <span class="tname" id="hdrName"></span></div>
     <div class="row" style="gap:6px">
-      <span id="syncDot" title="סנכרון" style="width:10px;height:10px;border-radius:50%;background:#9AA;display:inline-block"></span>
+      <button id="syncBtn" class="ghost sync" onclick="diagnostics()" title="מצב השמירה"><span id="syncDot"></span><span id="syncTxt"></span></button>
       <button class="ghost" style="color:#fff" id="btnList" onclick="closeTournament()">כל התחרויות</button>
       <button class="ghost" style="color:#fff" id="btnOut" onclick="FB.signOut()">יציאה</button>
     </div>
@@ -462,7 +465,10 @@ let S=fresh();
 function fresh(){return JSON.parse(JSON.stringify(DEF))}
 function save(){if(!TID)return;S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}scheduleCloud()}
 function uid(){return Math.random().toString(36).slice(2,9)}
-function logEv(t){S.log.unshift({t:Date.now(),m:t});if(S.log.length>300)S.log.length=300}
+function logEv(t,kind){
+  S.log.unshift({t:Date.now(),m:t,by:(PROFILE&&PROFILE.name)||(USER&&USER.email)||'',k:kind||'',d:S.rev||0});
+  if(S.log.length>800)S.log.length=800;
+}
 function P(id){return S.players.find(p=>p.id===id)}
 function pname(id){return id==null?'—':(P(id)?P(id).name:'?')}
 function G(id){return S.groups.find(g=>g.id===id)}
@@ -814,7 +820,7 @@ function confirmDraw(){
     groupSchedule(order.length).forEach((rm,ri)=>rm.forEach(([a,b])=>S.matches.push(newMatch({stage:'group',groupId:g.id,round:ri+1,p1:order[a-1],p2:order[b-1]}))));
   }
   syncTables();applyModelLocks();S.lastPlayed={};S.phaseStart=Date.now();
-  logEv('ההגרלה אושרה');goto('live');
+  logEv(`ההגרלה אושרה — ${S.groups.length} בתים, ${S.players.length} שחקנים`,'draw');goto('live');
   if(S.settings.auto)autoDistribute();
 }
 function newMatch(o){return Object.assign({id:uid(),sets:[],status:'pending',table:null,winner:null,wo:false,startedAt:null,endedAt:null},o)}
@@ -1024,7 +1030,7 @@ function quickAdd(){
 }
 function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n)return;const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
   if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
-  logEv('נוסף שחקן: '+n);closeModal();commit()}
+  logEv('נוסף שחקן: '+n,'player');closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
 function tablesTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
@@ -1154,7 +1160,7 @@ function undoLast(){
   if(m.stage==='ko')resetDownstream(m);
   Object.assign(m,u.prev);
   if(u.prev.status==='playing'){const t=S.tables.find(x=>x.n===u.tableN);if(t&&!t.matchId){t.matchId=m.id}else{m.status='pending';m.table=null;m.startedAt=null}}
-  S.lastUndo=null;hideToast();logEv('בוטלה תוצאה אחרונה');commit();
+  S.lastUndo=null;hideToast();logEv('בוטלה התוצאה האחרונה','undo');commit();
 }
 
 /* ---------- Point-game result ---------- */
@@ -1260,7 +1266,7 @@ function doLateEntry(){
     }
   }
   if(S.settings.model==='group'&&!S.tables.some(t=>t.lock===g.id)){const free=S.tables.find(t=>!t.lock);if(free)free.lock=g.id}
-  logEv(`שחקן מאוחר: ${name} → ${g.name}`);closeModal();commit();autoDistribute();
+  logEv(`שחקן מאוחר: ${name} נכנס ל${g.name}`,'player');closeModal();commit();autoDistribute();
 }
 
 
@@ -1269,7 +1275,7 @@ function startSwiss(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.byes=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';
   if(!S.settings.swissRounds)S.settings.swissRounds=suggestSwissRounds(S.players.length);
-  swissNextRound();logEv('התחילה תחרות שוויצרית');goto('live');if(S.settings.auto)autoDistribute();
+  swissNextRound();logEv(`התחילה תחרות שוויצרית — ${S.settings.swissRounds} סיבובים`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function swissStandings(){
   const ms=S.matches.filter(m=>m.stage==='swiss');
@@ -1291,7 +1297,7 @@ function swissNextRound(){
   else pairs=swissPair(pool,played)||fallbackPair(pool);
   pairs.forEach(([a,b])=>S.matches.push(newMatch({stage:'swiss',round:done+1,p1:a,p2:b})));
   if(bye){S.byes=(S.byes||[]).concat(bye);const m=newMatch({stage:'swiss',round:done+1,p1:bye,p2:null});m.status='done';m.winner=bye;m.bye=true;S.matches.push(m);logEv(pname(bye)+' קיבל/ה בוחן (Bye) בסיבוב '+(done+1))}
-  logEv('נוצר סיבוב '+(done+1));
+  logEv('נוצר סיבוב '+(done+1),'round');
   return pairs.length;
 }
 function swissPair(pool,played,depth){
@@ -1320,7 +1326,7 @@ function swissTab(){
 function startAmericano(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';S.settings.format='doubles';
-  americanoRound(1);logEv('התחיל '+SYSTEMS[sys()].n);goto('live');if(S.settings.auto)autoDistribute();
+  americanoRound(1);logEv(`התחיל ${SYSTEMS[sys()].n} — ${S.settings.rounds} סיבובים, עד ${S.settings.target} נק׳`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function amStandings(){
   const st={};S.players.forEach(p=>st[p.id]={id:p.id,pts:0,against:0,g:0,w:0});
@@ -1356,7 +1362,7 @@ function americanoRound(r){
     }
     S.matches.push(newMatch({stage:'round',round:r,t1,t2,target:S.settings.target,score:null}));
   }
-  logEv('נוצר סיבוב '+r);
+  logEv('נוצר סיבוב '+r,'round');
   return 1;
 }
 function amRoundsDone(){const ms=S.matches.filter(m=>m.stage==='round');return ms.length?Math.max(...ms.map(m=>m.round)):0}
@@ -1375,7 +1381,7 @@ function startKing(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';S.kingCrowns={};S.kingHolders={};
   S.kingQueue=shuffle(S.players.map(p=>p.id));
-  logEv('התחיל מלך השולחן');goto('live');kingFill();commit();
+  logEv(`התחיל מלך השולחן — עד ${S.settings.kingTarget} נק׳`,'start');goto('live');kingFill();commit();
 }
 function kingFill(){
   let n=0;const busy=busyPids();
@@ -1419,7 +1425,7 @@ function buildKO(){
   S.koRounds=buildBracket(main,'main');
   if(S.settings.consolation&&cons.length>=2)S.consRounds=buildBracket(cons,'cons');
   S.koBuilt=true;S.tables.forEach(t=>t.lock=null);S.phaseStart=Date.now();S.tab='bracket';
-  logEv('נבנה עץ הנוקאאוט');commit();autoDistribute();
+  logEv('נבנה עץ הנוקאאוט','ko');commit();autoDistribute();
 }
 function buildBracket(entrants,bracket){
   if(entrants.length<2)return 0;
@@ -1469,7 +1475,7 @@ function buildSwissKO(){
   S.matches=S.matches.filter(m=>m.stage!=='ko');
   S.koRounds=buildBracket(ent,'main');
   S.koBuilt=true;S.tables.forEach(t=>t.lock=null);S.phaseStart=Date.now();S.tab='bracket';
-  logEv('נבנה נוקאאוט למובילי השוויצרית');commit();autoDistribute();
+  logEv('נבנה נוקאאוט למובילי השוויצרית','ko');commit();autoDistribute();
 }
 function advanceKO(m){
   const rounds=m.bracket==='main'?S.koRounds:S.consRounds;
@@ -1495,7 +1501,18 @@ function bracketTab(){
     return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${m.status}'!=='pending')openResult('${m.id}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
   return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'עץ ניחומים'):'');
 }
-function logTab(){return `<ul class="plist">${S.log.map(l=>`<li><span class="tiny">${fmtTime(l.t)}</span><span class="n">${esc(l.m)}</span></li>`).join('')||'<li class="muted">ריק</li>'}</ul>`}
+function logTab(){
+  const days={};
+  (S.log||[]).forEach(l=>{const d=new Date(l.t).toLocaleDateString('he-IL');(days[d]=days[d]||[]).push(l)});
+  return `<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="tiny">${(S.log||[]).length} רשומות. כל פעולה נרשמת עם השעה ומי ביצע אותה.</span><button onclick="exportLog()">הורדת יומן</button></div>
+  ${Object.entries(days).map(([d,list])=>`<h3 style="margin:16px 0 8px">${d}</h3><ul class="plist">${list.map(l=>`<li><span class="tiny" style="min-width:44px">${fmtTime(l.t)}</span><span class="n">${esc(l.m)}</span>${l.by?`<span class="club">${esc(l.by)}</span>`:''}</li>`).join('')}</ul>`).join('')||'<div class="card muted">היומן ריק.</div>'}`;
+}
+function exportLog(){
+  const rows=[['תאריך','שעה','פעולה','בוצע על ידי']];
+  (S.log||[]).slice().reverse().forEach(l=>{const d=new Date(l.t);rows.push([d.toLocaleDateString('he-IL'),d.toLocaleTimeString('he-IL'),l.m,l.by||''])});
+  const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl(new Blob([csv],{type:'text/csv;charset=utf-8'}),(S.settings.name||'tournament')+'-יומן.csv');
+}
 
 /* ========================= FINAL ========================= */
 function finalRanking(){
@@ -1582,7 +1599,8 @@ window.addEventListener('fb-ready',()=>{
 });
 function watchList(){
   const q=FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc'));
-  unsubList=FB.onSnapshot(q,snap=>{LIST=snap.docs.map(d=>({id:d.id,...d.data()}));if(!TID)render()},e=>{console.error(e);toast('אין גישה לרשימת התחרויות — בדקו את חוקי Firestore')});
+  unsubList=FB.onSnapshot(q,snap=>{LIST=snap.docs.filter(d=>d.id!=='__connection_test__').map(d=>({id:d.id,...d.data()}));if(!TID)render()},
+    e=>{console.error(e);syncErr=e;setSync('error');if(!TID)render()});
 }
 function renderLogin(app){
   app.innerHTML=`<div class="card login stack"><h1>תן לי שולחן</h1><p class="muted">כניסה עם אותו משתמש של אפליקציית הנוכחות.</p>
@@ -1594,12 +1612,18 @@ function renderLogin(app){
 async function doLogin(){const e=document.getElementById('lg_e').value.trim(),p=document.getElementById('lg_p').value;const err=document.getElementById('lg_err');err.style.display='none';try{await FB.signIn(e,p)}catch(x){err.style.display='block';err.textContent='הכניסה נכשלה — בדקו אימייל וסיסמה.'}}
 function renderList(app){
   app.innerHTML=`<div class="live-top"><div><h1>התחרויות שלנו</h1><div class="tiny">${esc(PROFILE.name||'')}</div></div><button class="primary big" onclick="newTournament()">+ תחרות חדשה</button></div>
+  ${syncErr?`<div class="err-box" style="margin-bottom:14px"><b>אין גישה לענן.</b> תחרויות שנוצרו במכשיר הזה עדיין עובדות ונשמרות מקומית, אבל לא נראות במכשירים אחרים. <button style="margin-top:8px" onclick="diagnostics()">בדיקה ותיקון</button></div>`:''}
   ${LIST.length?`<ul class="tlist">${LIST.map(t=>`<li onclick="openTournament('${t.id}')"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${t.date||''} · ${t.playersCount||0} שחקנים · ${({setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'שלב הבתים',ko:'נוקאאוט',final:'הסתיימה'})[t.phase]||''}</div></div>
     <div class="row" style="gap:4px">${PROFILE.role==='Admin'?`<button class="ghost danger" onclick="event.stopPropagation();deleteTournament('${t.id}','${esc(t.name||'')}')">✕</button>`:''}<span style="color:var(--ink-3)">‹</span></div></li>`).join('')}</ul>`:
   `<div class="card muted">עדיין אין תחרויות. לחצו "תחרות חדשה" — לוקח דקה.</div>`}
   <p class="tiny" style="margin-top:20px">שחקנים אפשר לייבא ישירות מאפליקציית הנוכחות מתוך מסך "שחקנים".</p>`;
 }
-async function newTournament(){const id=uid()+uid();S=fresh();S.rev=0;TID=id;await pushCloud(true);openTournament(id)}
+async function newTournament(){
+  const id=uid()+uid();S=fresh();S.rev=0;TID=id;logEv('נפתחה תחרות חדשה','create');
+  const ok=await pushCloud(true);
+  openTournament(id);
+  if(!ok)setTimeout(diagnostics,400);
+}
 async function openTournament(id){
   TID=id;const cached=localStorage.getItem(KEY+'.'+id);if(cached){try{S=Object.assign(fresh(),JSON.parse(cached))}catch(e){}}
   const ref=FB.doc(FB.db,'tournaments',id);
@@ -1609,19 +1633,73 @@ async function openTournament(id){
     const d=snap.data();if(!d.state)return;
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
     if((d.rev||0)>(S.rev||0)||!S.settings.name&&!S.players.length){try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=d.rev||0;localStorage.setItem(KEY+'.'+id,d.state);closeModal();render()}catch(e){console.error(e)}}
-    setDot('#4CAF50');
-  },e=>{console.error(e);setDot('#C8412B');toast('אין חיבור לענן — עובדים מקומית')});
+    setSync('saved');
+  },e=>{console.error(e);syncErr=e;setSync('error');
+    if(!warnedOnce){warnedOnce=true;toast('אין גישה לענן. עובדים מהמכשיר.',{label:'בדיקה',fn:diagnostics})}});
   render();
 }
 function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent)render()}
-function scheduleCloud(){setDot('#F28C28');clearTimeout(cloudT);cloudT=setTimeout(pushCloud,400)}
+let syncState='idle',syncErr=null,retryN=0,retryT=null,warnedOnce=false;
+function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
 async function pushCloud(force){
-  if(!TID||!USER)return;cloudT=null;
-  const body={name:S.settings.name||'',date:S.settings.date||'',phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid};
+  if(!TID||!USER)return false;cloudT=null;clearTimeout(retryT);
+  if(!navigator.onLine){setSync('offline');scheduleRetry();return false}
+  setSync('saving');
+  const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
-  try{await FB.setDoc(FB.doc(FB.db,'tournaments',TID),body,{merge:true});setDot('#4CAF50')}catch(e){console.error(e);setDot('#C8412B');toast('השמירה לענן נכשלה — הנתונים שמורים בטלפון')}
+  try{
+    await FB.setDoc(FB.doc(FB.db,'tournaments',TID),body,{merge:true});
+    retryN=0;syncErr=null;setSync('saved');return true;
+  }catch(e){
+    console.error('pushCloud',e);syncErr=e;setSync('error');
+    if(!warnedOnce){warnedOnce=true;toast('לא נשמר בענן. הנתונים בטוחים במכשיר.',{label:'בדיקה',fn:diagnostics})}
+    scheduleRetry();return false;
+  }
 }
-function setDot(c){const d=document.getElementById('syncDot');if(d)d.style.background=c}
+function scheduleRetry(){
+  clearTimeout(retryT);retryN=Math.min(retryN+1,6);
+  retryT=setTimeout(()=>pushCloud(),Math.min(30000,1000*Math.pow(2,retryN)));
+}
+const SYNC_UI={idle:['#9AA6A0','—'],pending:['var(--ball)','שומר'],saving:['var(--ball)','שומר'],saved:['#3FBF77','נשמר'],offline:['#9AA6A0','לא מקוון'],error:['#FF6B5A','לא נשמר']};
+function setSync(st){
+  syncState=st;const d=document.getElementById('syncDot'),t=document.getElementById('syncTxt'),b=document.getElementById('syncBtn');
+  if(!d)return;const [c,l]=SYNC_UI[st]||SYNC_UI.idle;
+  d.style.background=c;if(t)t.textContent=l;
+  if(b)b.classList.toggle('bad',st==='error');
+}
+window.addEventListener('online',()=>{if(TID)pushCloud()});
+window.addEventListener('offline',()=>setSync('offline'));
+window.addEventListener('beforeunload',e=>{if(syncState==='error'||syncState==='pending'||syncState==='saving'){e.preventDefault();e.returnValue=''}});
+
+/* ---------- Connection diagnostics ---------- */
+const RULE_TEXT=`match /tournaments/{id} {\n  allow read, write: if request.auth != null;\n}`;
+async function diagnostics(){
+  modal('<h2>בדיקת שמירה בענן</h2><p class="muted">בודק…</p>');
+  const rows=[];
+  const add=(ok,label,detail)=>rows.push({ok,label,detail:detail||''});
+  add(!!USER,'מחובר למשתמש',USER?USER.email:'לא מחובר');
+  add(!!PROFILE,'המשתמש מוגדר במועדון',PROFILE?(PROFILE.name||'')+' · '+(PROFILE.role||''):'לא נמצא ב-users');
+  add(navigator.onLine,'חיבור לאינטרנט',navigator.onLine?'':'המכשיר לא מקוון');
+  let readOk=false,writeOk=false,readErr='',writeErr='';
+  try{await FB.getDocs(FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc')));readOk=true}
+  catch(e){readErr=e.code||e.message}
+  add(readOk,'קריאת רשימת התחרויות',readErr);
+  try{await FB.setDoc(FB.doc(FB.db,'tournaments','__connection_test__'),{ping:Date.now(),by:USER?USER.uid:''},{merge:true});writeOk=true}
+  catch(e){writeErr=e.code||e.message}
+  add(writeOk,'כתיבה לענן',writeErr);
+  let localKB=0;try{localKB=Math.round((localStorage.getItem(KEY+'.'+TID)||'').length/1024)}catch(e){}
+  const allOk=readOk&&writeOk;
+  const fix=(!readOk||!writeOk)?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
+    חסרה הרשאה ל-Firestore. בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, ולהוסיף בתוך הבלוק <code>match /databases/{database}/documents { … }</code> הקיים את השורות הבאות, ואז Publish.
+    <pre style="background:#fff;border:1px solid var(--edge);border-radius:8px;padding:10px;overflow:auto;font-size:12px;direction:ltr;text-align:left">${esc(RULE_TEXT.replace(/\\n/g,'\n'))}</pre>
+    <button onclick="navigator.clipboard.writeText(${JSON.stringify(RULE_TEXT).replace(/"/g,'&quot;')}.replace(/\\n/g,String.fromCharCode(10)));toast('הועתק')">העתקת הכלל</button></div>`:'';
+  modal(`<h2>בדיקת שמירה בענן</h2>
+  <ul class="plist" style="margin-top:12px">${rows.map(r=>`<li><span style="font-size:18px">${r.ok?'✅':'❌'}</span><span class="n">${r.label}</span><span class="club">${esc(r.detail)}</span></li>`).join('')}</ul>
+  <div class="explain" style="margin-top:12px">${allOk?'הכול תקין. כל שינוי נשמר בענן תוך פחות משנייה.':'התחרות ממשיכה לעבוד ונשמרת במכשיר הזה'+(localKB?` (${localKB}KB)`:'')+'. ברגע שההרשאה תתוקן, הכול יעלה לענן אוטומטית.'}</div>
+  ${fix}
+  <div class="row" style="margin-top:16px"><button class="primary" onclick="closeModal();pushCloud().then(ok=>toast(ok?'נשמר בענן':'עדיין לא נשמר'))">נסה לשמור עכשיו</button>
+  <button onclick="exportJSON()">הורדת גיבוי</button><button class="ghost" onclick="closeModal()">סגור</button></div>`);
+}
 async function deleteTournament(id,name){if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));localStorage.removeItem(KEY+'.'+id)}catch(e){toast('המחיקה נכשלה')}}
 /* import players from attendance app */
 async function importFromClub(){
