@@ -223,8 +223,8 @@ const KEY='tenlishulchan.v1';
 const GROUP_COLORS=['#1F6F4A','#2F6DB5','#B5512F','#7B4FB5','#B58A2F','#2FA3A8','#B52F7A','#5B7B2F','#2F4FB5','#8A6A4F'];
 const DEF={
   phase:'setup',
-  settings:{name:'',date:new Date().toISOString().slice(0,10),format:'singles',boGroup:5,boKO:5,tables:4,groupSize:4,advance:2,consolation:true,third:false,restMin:5,model:'group',auto:true,stuckMult:1.5},
-  players:[],groups:[],matches:[],tables:[],lots:{},log:[],lastPlayed:{},tab:'tables',avgDur:{}, koBuilt:false, lastUndo:null
+  settings:{name:'',date:new Date().toISOString().slice(0,10),system:'groups-ko',format:'singles',boGroup:5,boKO:5,tables:4,groupSize:4,advance:2,consolation:true,third:false,restMin:5,model:'group',auto:true,stuckMult:1.5,swissRounds:5,swissKO:false,swissAdvance:4,rounds:6,target:21,kingTarget:11},
+  players:[],groups:[],matches:[],tables:[],lots:{},log:[],lastPlayed:{},tab:'tables',avgDur:{}, koBuilt:false, lastUndo:null, kingQueue:[], kingHolders:{}, byes:[]
 };
 let S=fresh();
 function fresh(){return JSON.parse(JSON.stringify(DEF))}
@@ -235,7 +235,20 @@ function P(id){return S.players.find(p=>p.id===id)}
 function pname(id){return id==null?'—':(P(id)?P(id).name:'?')}
 function G(id){return S.groups.find(g=>g.id===id)}
 function gcolor(gid){const i=S.groups.findIndex(g=>g.id===gid);return GROUP_COLORS[(i<0?0:i)%GROUP_COLORS.length]}
-function needSets(m){const bo=m.stage==='group'?S.settings.boGroup:S.settings.boKO;return Math.ceil(bo/2)}
+function needSets(m){const bo=(m.stage==='group'||m.stage==='swiss')?S.settings.boGroup:S.settings.boKO;return Math.ceil(bo/2)}
+function sys(){return S.settings.system||'groups-ko'}
+function isPointGame(m){return m.stage==='round'||m.stage==='king'}
+function sideIds(m,i){return i===1?(m.t1||(m.p1?[m.p1]:[])):(m.t2||(m.p2?[m.p2]:[]))}
+function sideName(m,i){const a=sideIds(m,i);return a.length?a.map(pname).join(' / '):'—'}
+function matchPids(m){return [...sideIds(m,1),...sideIds(m,2)]}
+const SYSTEMS={
+ 'groups-ko':{n:'בתים + נוקאאוט',d:'הקלאסי: כל אחד משחק בבית קטן, המובילים עולים לעץ הדחה.',steps:['setup','players','draw','live','ko','final'],live:'שלב הבתים'},
+ 'swiss':{n:'שוויצרית',d:'מספר סיבובים קבוע, כל סיבוב מול יריב בניקוד דומה. אף אחד לא מודח.',steps:['setup','players','live','ko','final'],live:'סיבובים'},
+ 'americano':{n:'אמריקנו — זוגות מתחלפים',d:'מחליפים פרטנר בכל סיבוב, הניקוד אישי. הכי חברתי.',steps:['setup','players','live','final'],live:'סיבובים'},
+ 'mexicano':{n:'מקסיקנו',d:'כמו אמריקנו, אבל הזוגות נקבעים לפי הטבלה החיה — המשחקים נהיים צמודים.',steps:['setup','players','live','final'],live:'סיבובים'},
+ 'king':{n:'מלך השולחן',d:'המנצח נשאר, המפסיד יורד והבא בתור נכנס. משחקים קצרים, תור מהיר.',steps:['setup','players','live','final'],live:'מלך השולחן'}
+};
+function isTeamSys(){return sys()==='americano'||sys()==='mexicano'}
 function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}
 function mins(ms){return Math.round(ms/60000)}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -243,13 +256,15 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function commit(){save();render()}
 
 /* ========================= NAV ========================= */
-const STEPS=[['setup','הגדרות'],['players','שחקנים'],['draw','הגרלה'],['live','בתים'],['ko','נוקאאוט'],['final','פודיום']];
-function stepIndex(p){return STEPS.findIndex(s=>s[0]===p)}
+const STEP_NAMES={setup:'הגדרות',players:'שחקנים',draw:'הגרלה',live:'משחקים',ko:'נוקאאוט',final:'פודיום'};
+function steps(){const st=SYSTEMS[sys()].steps.slice();if(sys()==='swiss'&&!S.settings.swissKO)return st.filter(x=>x!=='ko');return st}
+function stepIndex(p){return steps().indexOf(p)}
 function goto(p){S.phase=p;commit();window.scrollTo(0,0)}
 function renderSteps(){
   const cur=stepIndex(S.phase);
-  const reach={setup:true,players:true,draw:S.groups.length>0,live:S.matches.length>0,ko:S.koBuilt,final:S.koBuilt&&koFinished()};
-  document.getElementById('steps').innerHTML=STEPS.map((s,i)=>`<button class="step ${i<cur?'done':''} ${i===cur?'active':''}" ${reach[s[0]]?'':'disabled'} onclick="goto('${s[0]}')">${s[1]}</button>`).join('');
+  const reach={setup:true,players:true,draw:S.groups.length>0,live:S.matches.length>0,ko:S.koBuilt,final:canFinish()};
+  const lbl=Object.assign({},STEP_NAMES,{live:SYSTEMS[sys()].live});
+  document.getElementById('steps').innerHTML=steps().map((k,i)=>`<button class="step ${i<cur?'done':''} ${i===cur?'active':''}" ${reach[k]?'':'disabled'} onclick="goto('${k}')">${lbl[k]}</button>`).join('');
   document.getElementById('hdrName').textContent=S.settings.name?'· '+S.settings.name:'';
 }
 
@@ -277,43 +292,95 @@ function renderSetup(app){
       <div><label>שם התחרות</label><input id="s_name" value="${esc(s.name)}" placeholder="למשל: גביע הקיבוץ 2026" ${locked?'disabled':''}></div>
       <div><label>תאריך</label><input id="s_date" type="date" value="${s.date}" ${locked?'disabled':''}></div>
     </div>
-    <div><label>סוג התחרות</label>
+    <div><label>שיטת התחרות</label>
       <div class="radio-group">
-        ${[['singles','יחידים'],['doubles','זוגות']].map(([v,l])=>`<label class="chip ${s.format===v?'on':''}"><input type="radio" name="fmt" value="${v}" ${s.format===v?'checked':''} ${locked?'disabled':''} onchange="setFmt(this.value)">${l}</label>`).join('')}
-        <label class="chip" style="opacity:.5" title="בגרסה הבאה">קבוצתי (קורביון) — בקרוב</label>
+        ${Object.entries(SYSTEMS).map(([v,o])=>`<label class="chip ${s.system===v?'on':''}"><input type="radio" name="sysx" value="${v}" ${s.system===v?'checked':''} ${locked?'disabled':''} onchange="setSystem(this.value)">${o.n}</label>`).join('')}
       </div>
-      <div class="hint">בזוגות מזינים כל זוג כשם אחד (למשל "דני / יוסי").</div>
+      <div class="hint">${SYSTEMS[s.system].d}</div>
+      ${locked?'':'<button style="margin-top:10px" onclick="wizard()">🧭 לא בטוח? תעזור לי לבחור</button>'}
     </div>
-    <div class="grid2">
+    ${isTeamSys()||s.system==='king'?'':`<div><label>סוג משחק</label>
+      <div class="radio-group">
+        ${[['singles','יחידים'],['doubles','זוגות קבועים']].map(([v,l])=>`<label class="chip ${s.format===v?'on':''}"><input type="radio" name="fmt" value="${v}" ${s.format===v?'checked':''} ${locked?'disabled':''} onchange="setFmt(this.value)">${l}</label>`).join('')}
+      </div>
+      <div class="hint">בזוגות קבועים מזינים כל זוג כשם אחד (למשל "דני / יוסי").</div>
+    </div>`}
+    ${s.system==='groups-ko'?`<div class="grid2">
       <div><label>מערכות בשלב הבתים</label><select id="s_bog" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boGroup==b?'selected':''}>הטוב מ-${b} (ראשון ל-${Math.ceil(b/2)})</option>`).join('')}</select></div>
       <div><label>מערכות בנוקאאוט</label><select id="s_bok" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boKO==b?'selected':''}>הטוב מ-${b} (ראשון ל-${Math.ceil(b/2)})</option>`).join('')}</select></div>
     </div>
     <div class="grid2">
-      <div><label>שולחנות פעילים באולם</label><input id="s_tables" type="number" min="1" max="40" value="${s.tables}"></div>
       <div><label>שחקנים בבית (יעד)</label><select id="s_gs" ${locked?'disabled':''}>${[3,4,5].map(n=>`<option value="${n}" ${s.groupSize==n?'selected':''}>${n}</option>`).join('')}</select></div>
-    </div>
-    <div class="grid2">
       <div><label>עולים מכל בית לנוקאאוט</label><select id="s_adv" ${locked?'disabled':''}>${[1,2].map(n=>`<option value="${n}" ${s.advance==n?'selected':''}>${n}</option>`).join('')}</select></div>
-      <div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest" type="number" min="0" max="30" value="${s.restMin}"></div>
     </div>
     <div class="row">
       <label class="chip ${s.consolation?'on':''}"><input type="checkbox" ${s.consolation?'checked':''} ${locked?'disabled':''} onchange="S.settings.consolation=this.checked;commit()">בית ניחומים לשאר השחקנים</label>
       <label class="chip ${s.third?'on':''}"><input type="checkbox" ${s.third?'checked':''} ${locked?'disabled':''} onchange="S.settings.third=this.checked;commit()">משחק על מקום 3</label>
+    </div>`:''}
+    ${s.system==='swiss'?`<div class="grid2">
+      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${s.swissRounds}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
+      <div><label>מערכות בכל משחק</label><select id="s_bog" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boGroup==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div>
     </div>
-    <div><label>איך מפזרים משחקים לשולחנות?</label>
+    <div class="row"><label class="chip ${s.swissKO?'on':''}"><input type="checkbox" ${s.swissKO?'checked':''} ${locked?'disabled':''} onchange="S.settings.swissKO=this.checked;commit()">נוקאאוט למובילים בסוף</label>
+      ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
+    ${isTeamSys()?`<div class="grid2">
+      <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${s.rounds}"><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
+      <div><label>משחק עד כמה נקודות</label><select id="s_target">${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
+    </div>`:''}
+    ${s.system==='king'?`<div class="grid2">
+      <div><label>משחק עד כמה נקודות</label><select id="s_king">${[5,7,11,15,21].map(n=>`<option value="${n}" ${s.kingTarget==n?'selected':''}>${n} נקודות</option>`).join('')}</select></div>
+      <div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest2" type="number" min="0" max="30" value="${s.restMin}"></div>
+    </div><div class="hint">המנצח נשאר על השולחן. המפסיד עובר לסוף התור.</div>`:''}
+    <div class="grid2">
+      <div><label>שולחנות פעילים באולם</label><input id="s_tables" type="number" min="1" max="40" value="${s.tables}"></div>
+      ${s.system==='king'?'<div></div>':`<div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest" type="number" min="0" max="30" value="${s.restMin}"></div>`}
+    </div>
+    ${sys()==='groups-ko'?`<div><label>איך מפזרים משחקים לשולחנות?</label>
       <div class="radio-group">
         ${[['group','בית = שולחן','לכל בית שולחן קבוע. השחקנים תמיד יודעים לאן ללכת.'],['pool','מחסנית משותפת','כל שולחן פנוי מקבל את המשחק הדחוף ביותר.'],['hybrid','משולב','חלק מהשולחנות נעולים לבתים, השאר פנויים לכולם.']].map(([v,l,d])=>`<label class="chip ${s.model===v?'on':''}" title="${d}"><input type="radio" name="model" value="${v}" ${s.model===v?'checked':''} onchange="S.settings.model=this.value;commit()">${l}</label>`).join('')}
       </div>
       <div class="hint" id="modelHint">${{group:'לכל בית שולחן קבוע. אם יש יותר שולחנות מבתים — בתים גדולים מקבלים שניים.',pool:'כל שולחן שמתפנה מושך את המשחק הדחוף ביותר: סיבוב נמוך, בית מפגר, מי שמחכה הכי הרבה.',hybrid:'נועלים שולחן לבית מתוך כרטיס השולחן. שולחנות לא נעולים משרתים את כולם.'}[s.model]}</div>
-    </div>
+    </div>`:''}
   </div>
   <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמור והמשך לשחקנים ←</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button></div>`;
 }
 function setFmt(v){S.settings.format=v;commit()}
+function setSystem(v){S.settings.system=v;if(v!=='groups-ko')S.settings.model='pool';if(isTeamSys())S.settings.format='doubles';commit()}
+function suggestSwissRounds(n){return Math.max(3,Math.min(9,Math.ceil(Math.log2(Math.max(2,n)))+1))}
+/* ---------- Wizard ---------- */
+function wizard(){
+  modal(`<h2>בוא נמצא את השיטה הנכונה</h2><p class="muted">שלוש שאלות, ואני ממליץ.</p>
+  <label>כמה משתתפים בערך?</label><div class="radio-group" id="wz1">${[['s','עד 8'],['m','9–16'],['l','17–32'],['xl','33+']].map(([v,l],i)=>`<label class="chip ${i==1?'on':''}"><input type="radio" name="wz1" value="${v}" ${i==1?'checked':''} onchange="[...document.querySelectorAll('#wz1 .chip')].forEach(c=>c.classList.toggle('on',c.contains(this)))">${l}</label>`).join('')}</div>
+  <label>כמה זמן יש לכם?</label><div class="radio-group" id="wz2">${[['short','עד שעתיים'],['mid','חצי יום'],['long','יום שלם']].map(([v,l],i)=>`<label class="chip ${i==0?'on':''}"><input type="radio" name="wz2" value="${v}" ${i==0?'checked':''} onchange="[...document.querySelectorAll('#wz2 .chip')].forEach(c=>c.classList.toggle('on',c.contains(this)))">${l}</label>`).join('')}</div>
+  <label>מה האופי של האירוע?</label><div class="radio-group" id="wz3">${[['fun','ערב חברתי — שיהיה כיף'],['comp','תחרות רצינית עם מנצח ברור'],['mixed','רמות מעורבות, ילדים ומבוגרים']].map(([v,l],i)=>`<label class="chip ${i==0?'on':''}"><input type="radio" name="wz3" value="${v}" ${i==0?'checked':''} onchange="[...document.querySelectorAll('#wz3 .chip')].forEach(c=>c.classList.toggle('on',c.contains(this)))">${l}</label>`).join('')}</div>
+  <div id="wzOut" class="explain" style="margin-top:14px"></div>
+  <div class="row" style="margin-top:14px"><button class="primary" id="wzGo">החל את ההמלצה</button><button class="ghost" onclick="closeModal()">סגור</button></div>`);
+  const calc=()=>{
+    const n=document.querySelector('input[name=wz1]:checked').value,t=document.querySelector('input[name=wz2]:checked').value,k=document.querySelector('input[name=wz3]:checked').value;
+    let r,why;
+    if(k==='fun'){r='americano';why='ערב חברתי: כולם משחקים כל הזמן, מחליפים פרטנר, ואף אחד לא מודח.'}
+    else if(k==='mixed'){r='mexicano';why='רמות מעורבות: הזוגות מתאזנים לפי הטבלה החיה, כך שהמשחקים צמודים לאורך כל הערב.'}
+    else if(n==='s'){r='groups-ko';why='קבוצה קטנה: בית אחד או שניים ואז נוקאאוט — מהיר ונותן מנצח ברור.'}
+    else if(t==='short'&&(n==='l'||n==='xl')){r='swiss';why='הרבה משתתפים וזמן קצר: שוויצרית נותנת לכולם מספר קבוע של משחקים ומדרגת את כולם.'}
+    else {r='groups-ko';why='תחרות רצינית עם זמן: בתים ואז נוקאאוט — התקן של ITTF.'}
+    if(n==='s'&&k==='fun'&&t==='short'){r='king';why='קבוצה קטנה שרוצה כיף מהיר: מלך השולחן — משחקים קצרים ותור שזז.'}
+    const extra=r==='swiss'?` מומלץ ${suggestSwissRounds(n==='l'?24:40)} סיבובים.`:r==='groups-ko'?` ${S.players.length?suggestText(S.players.length):'אחרי הזנת השחקנים אציע חלוקה לבתים.'}`:'';
+    document.getElementById('wzOut').innerHTML=`<b>${SYSTEMS[r].n}</b><br>${esc(why)}${extra?'<br>'+esc(extra):''}`;
+    return r;
+  };
+  ['wz1','wz2','wz3'].forEach(id=>document.querySelectorAll('#'+id+' input').forEach(i=>i.addEventListener('change',calc)));
+  document.getElementById('wzGo').onclick=()=>{const r=calc();setSystem(r);if(r==='swiss')S.settings.swissRounds=suggestSwissRounds(S.players.length||24);closeModal();commit();toast('השיטה הוגדרה: '+SYSTEMS[r].n)};
+  calc();
+}
 function saveSetup(){
   const s=S.settings;const q=id=>document.getElementById(id);
-  if(!S.matches.length){s.name=q('s_name').value.trim();s.date=q('s_date').value;s.boGroup=+q('s_bog').value;s.boKO=+q('s_bok').value;s.groupSize=+q('s_gs').value;s.advance=+q('s_adv').value;}
-  s.tables=Math.max(1,+q('s_tables').value||1);s.restMin=+q('s_rest').value||0;
+  if(!S.matches.length){s.name=q('s_name').value.trim();s.date=q('s_date').value;
+    if(q('s_bog'))s.boGroup=+q('s_bog').value; if(q('s_bok'))s.boKO=+q('s_bok').value;
+    if(q('s_gs'))s.groupSize=+q('s_gs').value; if(q('s_adv'))s.advance=+q('s_adv').value;
+    if(q('s_swr'))s.swissRounds=Math.max(1,+q('s_swr').value||5);
+    if(q('s_rounds'))s.rounds=Math.max(1,+q('s_rounds').value||6);
+    if(q('s_target'))s.target=+q('s_target').value; if(q('s_king'))s.kingTarget=+q('s_king').value;}
+  s.tables=Math.max(1,+q('s_tables').value||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
   syncTables();goto('players');
 }
 function syncTables(){
@@ -326,10 +393,10 @@ function syncTables(){
 function renderPlayers(app){
   const locked=S.matches.length>0;
   const cnt=S.players.length;
-  const ng=cnt?Math.max(1,Math.round(cnt/S.settings.groupSize)):0;
   app.innerHTML=`
   <h1>שחקנים</h1>
-  <p class="muted">${cnt?`${cnt} רשומים — יתחלקו ל-${ng} בתים.`:'עדיין אין אף אחד. הוסיפו שחקן אחד, או הדביקו רשימה שלמה מוואטסאפ.'}</p>
+  <p class="muted">${cnt?suggestText(cnt):'עדיין אין אף אחד. הוסיפו שחקן אחד, או הדביקו רשימה שלמה מוואטסאפ.'}</p>
+  ${cnt>=3?planCard(cnt):''}
   ${locked?'<div class="warn-box">התחרות רצה. כדי להוסיף שחקן עכשיו, השתמשו ב"הוסף שחקן מאוחר" במסך הבתים.</div>':`
   <div class="card stack">
     <div class="grid2">
@@ -352,7 +419,11 @@ function renderPlayers(app){
   <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${p.seed}">מדורג ${p.seed}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${p.id}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="S.players=S.players.filter(x=>x.id!=='${p.id}');commit()">✕</button>`}</li>`).join('')}</ul>
   <div class="toolbar">
     <button class="ghost" onclick="goto('setup')">→ הגדרות</button>
-    ${locked?`<button class="primary big" onclick="goto('live')">למסך הבתים ←</button>`:`<button class="primary big" ${cnt<3?'disabled':''} onclick="makeDraw()">צור בתים והגרל ←</button>`}
+    ${locked?`<button class="primary big" onclick="goto('live')">למסך המשחקים ←</button>`:
+      sys()==='groups-ko'?`<button class="primary big" ${cnt<3?'disabled':''} onclick="makeDraw()">צור בתים והגרל ←</button>`:
+      sys()==='swiss'?`<button class="primary big" ${cnt<4?'disabled':''} onclick="startSwiss()">התחל תחרות שוויצרית ←</button>`:
+      isTeamSys()?`<button class="primary big" ${cnt<4?'disabled':''} onclick="startAmericano()">התחל ${SYSTEMS[sys()].n} ←</button>`:
+      `<button class="primary big" ${cnt<3?'disabled':''} onclick="startKing()">התחל מלך השולחן ←</button>`}
   </div>`;
   setTimeout(()=>document.getElementById('p_name')?.focus(),0);
 }
@@ -371,10 +442,54 @@ function bulkAdd(){
 }
 function cycleSeed(id){const p=P(id);p.seed=(p.seed+1)%4;commit()}
 
+/* ---------- Structure planner ---------- */
+function groupSizes(n,ng){const base=Math.floor(n/ng),rem=n%ng;return Array.from({length:ng},(_,i)=>base+(i<rem?1:0))}
+function planFor(n,ng){
+  const sizes=groupSizes(n,ng);
+  const matches=sizes.reduce((a,x)=>a+x*(x-1)/2,0);
+  const perPlayer=Math.min(...sizes)-1;
+  const avg=avgDuration(S.settings.boGroup)/60000;
+  const par=Math.max(1,Math.min(S.settings.tables,ng*(S.settings.model==='group'?1:99)));
+  const est=Math.ceil(matches/Math.max(1,S.settings.tables)*avg);
+  return {ng,sizes,matches,perPlayer,est,ok:Math.min(...sizes)>=3&&Math.max(...sizes)<=5};
+}
+function bestPlan(n){
+  const opts=[];for(let ng=1;ng<=Math.floor(n/3);ng++){const pl=planFor(n,ng);if(pl.ok)opts.push(pl)}
+  if(!opts.length)return [planFor(n,Math.max(1,Math.round(n/4)))];
+  const target=S.settings.groupSize;
+  const cost=p=>p.sizes.reduce((a,x)=>a+Math.abs(x-target),0);
+  opts.sort((a,b)=>cost(a)-cost(b)||a.ng-b.ng);
+  return opts;
+}
+function suggestText(n){
+  if(sys()==='swiss'){const r=suggestSwissRounds(n);return `${n} רשומים — מומלץ ${r} סיבובים (כל אחד ישחק ${r} משחקים).`}
+  if(isTeamSys()){const courts=Math.min(S.settings.tables,Math.floor(n/4));const sit=n-courts*4;return `${n} רשומים — ${courts} שולחנות פעילים בכל סיבוב${sit>0?`, ${sit} ינוחו בכל סיבוב בסבב`:''}.`}
+  if(sys()==='king')return `${n} רשומים — תור אחד לכל שולחן, המנצח נשאר.`;
+  const p=bestPlan(n)[0];
+  return `${n} רשומים — מומלץ ${p.ng===1?'בית אחד':p.ng+' בתים'} (${planDesc(p)}). כל אחד ישחק לפחות ${p.perPlayer} משחקים, סיום משוער אחרי כ-${p.est} דק׳.`;
+}
+function planDesc(p){
+  const uniq=[...new Set(p.sizes)].sort((a,b)=>b-a);
+  return parts.length<2?parts[0]:parts.slice(0,-1).join(', ')+' ו'+(/^[0-9]/.test(parts[parts.length-1])?'-':'')+parts[parts.length-1];
+}
+function planCard(n){
+  if(sys()==='swiss'){
+    const r=S.settings.swissRounds||suggestSwissRounds(n);
+    return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
+    <div class="hint">${r} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
+  }
+  if(isTeamSys()||sys()==='king')return '';
+  const opts=bestPlan(n).slice(0,4);const cur=S.settings.groupSize;
+  return `<div class="card" style="margin-bottom:14px"><h3>איך לחלק לבתים?</h3><p class="tiny">בחרו אפשרות — אפשר לשנות גם אחרי ההגרלה.</p>
+  <div style="overflow-x:auto"><table class="st"><tr><th></th><th>בתים</th><th>גדלים</th><th>משחקים</th><th>לכל שחקן</th><th>זמן משוער</th></tr>
+  ${opts.map((p,i)=>`<tr style="cursor:pointer" onclick="S.settings.groupSize=${p.sizes[0]};S.planNg=${p.ng};commit()"><td>${(S.planNg?S.planNg===p.ng:i===0)?'✅':'○'}</td><td><b>${p.ng}</b></td><td>${[...new Set(p.sizes)].sort((a,b)=>b-a).map(u=>`${p.sizes.filter(x=>x===u).length}×${u}`).join(' + ')}</td><td>${p.matches}</td><td>${p.perPlayer}</td><td>~${p.est} דק׳</td></tr>`).join('')}
+  </table></div></div>`;
+}
+
 /* ---------- Draw (snake seeding) ---------- */
 function makeDraw(keepManual){
-  const n=S.players.length;const gs=S.settings.groupSize;
-  let ng=Math.max(1,Math.round(n/gs));
+  const n=S.players.length;
+  let ng=S.planNg||bestPlan(n)[0].ng;
   const s1=S.players.filter(p=>p.seed===1).length;if(s1>ng)ng=s1;
   if(n/ng<3&&ng>1)ng=Math.max(1,Math.floor(n/3));
   buildGroups(ng);goto('draw');
@@ -512,9 +627,9 @@ function groupDone(gid){return S.matches.filter(m=>m.stage==='group'&&m.groupId=
 function allGroupsDone(){return S.matches.some(m=>m.stage==='group')&&S.matches.filter(m=>m.stage==='group').every(m=>m.status==='done')}
 
 /* ========================= ENGINE: scheduling ========================= */
-function busyPids(){const s=new Set();for(const m of S.matches)if(m.status==='playing'){s.add(m.p1);s.add(m.p2)}return s}
+function busyPids(){const s=new Set();for(const m of S.matches)if(m.status==='playing')matchPids(m).forEach(id=>s.add(id));return s}
 function idleSince(pid){return S.lastPlayed[pid]||S.phaseStart||Date.now()}
-function pendingMatches(){return S.matches.filter(m=>m.status==='pending'&&m.p1&&m.p2)}
+function pendingMatches(){return S.matches.filter(m=>m.status==='pending'&&sideIds(m,1).length&&sideIds(m,2).length)}
 function groupProgress(gid){const ms=S.matches.filter(m=>m.stage==='group'&&m.groupId===gid);return ms.length?ms.filter(m=>m.status==='done').length/ms.length:1}
 function priority(m,now){
   const why=[];let sc=0;
@@ -523,9 +638,15 @@ function priority(m,now){
     sc-=100*(m.round-minRound);why.push('סיבוב '+m.round);
     const maxP=Math.max(...S.groups.map(g=>groupProgress(g.id)));const lag=maxP-groupProgress(m.groupId);
     if(lag>0.01){sc+=30*lag*4;why.push(G(m.groupId).name+' מפגר')}
-  }else{sc-=100*m.koRound;why.push(m.bracket==='cons'?'ניחומים':'נוקאאוט'+' · '+koRoundName(m))}
-  const idle=Math.max(now-idleSince(m.p1),now-idleSince(m.p2));sc+=2*mins(idle);
-  const restMs=S.settings.restMin*60000;const lastEnd=Math.max(S.lastPlayed[m.p1]||0,S.lastPlayed[m.p2]||0);
+  }else if(m.stage==='swiss'||m.stage==='round'){
+    const pend=pendingMatches().filter(x=>x.stage===m.stage);
+    const minRound=pend.length?Math.min(...pend.map(x=>x.round)):m.round;
+    sc-=100*(m.round-minRound);why.push('סיבוב '+m.round);
+  }else if(m.stage==='king'){why.push('מלך השולחן')}
+  else{sc-=100*m.koRound;why.push(m.bracket==='cons'?'ניחומים':'נוקאאוט'+' · '+koRoundName(m))}
+  const pids=matchPids(m);
+  const idle=Math.max(...pids.map(id=>now-idleSince(id)));sc+=2*mins(idle);
+  const restMs=S.settings.restMin*60000;const lastEnd=Math.max(0,...pids.map(id=>S.lastPlayed[id]||0));
   const owes=m.owes;if(owes){sc+=40;why.push('חייב משחקים')}
   else if(lastEnd&&now-lastEnd<restMs){sc-=60;m._rest=true;why.push('במנוחה')}
   if(idle>0)why.push('ממתין '+mins(idle)+' דק׳');
@@ -533,7 +654,7 @@ function priority(m,now){
 }
 function candidatesFor(table){
   const now=Date.now();const busy=busyPids();
-  let c=pendingMatches().filter(m=>!busy.has(m.p1)&&!busy.has(m.p2));
+  let c=pendingMatches().filter(m=>!matchPids(m).some(id=>busy.has(id)));
   if(table.lock&&S.matches.some(m=>m.stage==='group'&&m.status!=='done'))c=c.filter(m=>m.groupId===table.lock);
   c=c.map(m=>({m,...priority(m,now)}));
   const nonRest=c.filter(x=>!x.m._rest);if(nonRest.length)c=nonRest;
@@ -541,10 +662,18 @@ function candidatesFor(table){
   c.sort((a,b)=>b.sc-a.sc||(a.m.round||0)-(b.m.round||0));
   return c;
 }
-function startOn(table,m){table.matchId=m.id;m.table=table.n;m.status='playing';m.startedAt=Date.now();logEv(`${pname(m.p1)} – ${pname(m.p2)} לשולחן ${table.n}`)}
+function startOn(table,m){table.matchId=m.id;m.table=table.n;m.status='playing';m.startedAt=Date.now();logEv(`${sideName(m,1)} – ${sideName(m,2)} לשולחן ${table.n}`)}
 function distribute(){
+  if(sys()==='king')return kingFill();
   let n=0;for(const t of S.tables){if(t.matchId)continue;const c=candidatesFor(t);if(c.length){startOn(t,c[0].m);n++}}
+  if(!n)n=maybeNextRound()?distribute():0;
   return n;
+}
+function maybeNextRound(){
+  if(sys()==='swiss'&&!S.koBuilt){if(S.matches.filter(m=>m.stage==='swiss').every(m=>m.status==='done'))return swissNextRound()>0}
+  if(isTeamSys()){const ms=S.matches.filter(m=>m.stage==='round');const r=Math.max(0,...ms.map(m=>m.round));
+    if(r<S.settings.rounds&&ms.every(m=>m.status==='done'))return americanoRound(r+1)>0}
+  return false;
 }
 function autoDistribute(){if(S.settings.auto){const n=distribute();if(n)commit()}}
 function distributeClick(){const n=distribute();commit();toast(n?`${n} משחקים נשלחו לשולחנות`:'אין משחק מתאים לשולחן פנוי כרגע')}
@@ -553,41 +682,102 @@ function distributeClick(){const n=distribute();commit();toast(n?`${n} משחק�
 let ticker=null;
 function renderLive(app){
   syncTables();
-  const groupPhase=!S.koBuilt;
-  const ms=groupPhase?S.matches.filter(m=>m.stage==='group'):S.matches.filter(m=>m.stage==='ko');
-  const done=ms.filter(m=>m.status==='done').length,total=ms.length;
+  const sy=sys();const koPhase=S.koBuilt;
+  const stage=koPhase?'ko':(sy==='groups-ko'?'group':sy==='swiss'?'swiss':isTeamSys()?'round':'king');
+  const ms=S.matches.filter(m=>m.stage===stage);
+  const done=ms.filter(m=>m.status==='done').length;
+  let total=ms.length;
+  if(!koPhase&&sy==='swiss')total=Math.ceil(S.players.length/2)*S.settings.swissRounds;
+  if(!koPhase&&isTeamSys())total=Math.min(S.settings.tables,Math.floor(S.players.length/4))*S.settings.rounds;
   const est=estimateFinish();
   const tab=S.tab;
+  const title=koPhase?'נוקאאוט':SYSTEMS[sy].live;
+  const standTab=sy==='groups-ko'?['groups','טבלאות הבתים']:sy==='swiss'?['groups','טבלה']:isTeamSys()?['groups','טבלה אישית']:['groups','מלכים ותור'];
+  const standFn=sy==='groups-ko'?groupsTab:sy==='swiss'?swissTab:isTeamSys()?amTab:kingTab;
   app.innerHTML=`
   <div class="live-top">
-    <div><h1>${groupPhase?'שלב הבתים':'נוקאאוט'}</h1><div class="tiny">${esc(S.settings.name)} · ${S.settings.date}</div></div>
-    <div class="stat"><div><b>${done}/${total}</b><span>משחקים</span></div><div><b>${S.tables.filter(t=>t.matchId).length}/${S.tables.length}</b><span>שולחנות פעילים</span></div><div><b>${est||'—'}</b><span>סיום צפוי</span></div></div>
+    <div><h1>${title}</h1><div class="tiny">${esc(S.settings.name)} · ${S.settings.date} · ${SYSTEMS[sy].n}</div></div>
+    <div class="stat"><div><b>${done}${sy==='king'?'':'/'+total}</b><span>משחקים</span></div><div><b>${S.tables.filter(t=>t.matchId).length}/${S.tables.length}</b><span>שולחנות פעילים</span></div><div><b>${est||'—'}</b><span>סיום צפוי</span></div></div>
   </div>
-  <div class="progress"><i style="width:${total?done/total*100:0}%"></i></div>
+  ${sy==='king'?'':`<div class="progress"><i style="width:${total?Math.min(100,done/total*100):0}%"></i></div>`}
+  <div class="row" style="margin-bottom:10px"><input id="pSearch" placeholder="🔎 חיפוש שחקן — מתי הוא משחק?" oninput="playerSearch(this.value)" style="max-width:340px"></div>
+  <div id="pSearchOut"></div>
   <div class="tabs">
-    ${[['tables','שולחנות ותור'],['groups','טבלאות הבתים'],['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt).map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
+    ${[['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt).map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
   </div>
-  <div id="tabBody">${({tables:tablesTab,groups:groupsTab,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'?tab:'tables']()}</div>
+  <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'?tab:'tables']()}</div>
   <div class="toolbar">
-    ${groupPhase&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו — בנה את עץ הנוקאאוט ←</button>`:''}
-    ${!groupPhase&&koFinished()?`<button class="primary big" onclick="goto('final')">🏆 לפודיום ←</button>`:''}
-    ${groupPhase?'<button onclick="lateEntry()">+ הוסף שחקן מאוחר</button>':''}
+    ${!koPhase&&sy==='groups-ko'&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו — בנה את עץ הנוקאאוט ←</button>`:''}
+    ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בנה נוקאאוט ל-${S.settings.swissAdvance} המובילים ←</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום ←</button>`):''}
+    ${!koPhase&&isTeamSys()&&amRoundsDone()>=S.settings.rounds&&ms.every(m=>m.status==='done')?`<button class="primary big" onclick="goto('final')">🏆 לפודיום ←</button>`:''}
+    ${!koPhase&&isTeamSys()&&ms.every(m=>m.status==='done')&&amRoundsDone()<S.settings.rounds?`<button class="primary" onclick="americanoRound(amRoundsDone()+1);commit();autoDistribute()">+ צור סיבוב ${amRoundsDone()+1}</button>`:''}
+    ${sy==='king'?`<button class="primary big" onclick="endKing()">🏆 סיים ולפודיום ←</button>`:''}
+    ${koPhase&&koFinished()?`<button class="primary big" onclick="goto('final')">🏆 לפודיום ←</button>`:''}
+    ${!koPhase&&sy==='groups-ko'?'<button onclick="lateEntry()">+ הוסף שחקן מאוחר</button>':''}
+    ${!koPhase&&(sy==='swiss'||isTeamSys()||sy==='king')?'<button onclick="quickAdd()">+ הוסף שחקן</button>':''}
     <button onclick="openPublic()">📺 מסך לאולם</button>
+    <button onclick="shareSummary()">📤 שתף סיכום</button>
   </div>`;
   clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){if(S.tab==='tables')document.getElementById('tabBody').innerHTML=tablesTab()}else clearInterval(ticker)},30000);
 }
 function estimateFinish(){
-  const stage=S.koBuilt?'ko':'group';const bo=stage==='group'?S.settings.boGroup:S.settings.boKO;
-  const avg=avgDuration(bo);const left=S.matches.filter(m=>m.stage===stage&&m.status!=='done').length;
-  if(!left)return null;const par=Math.max(1,S.tables.length);return fmtTime(Date.now()+avg*Math.ceil(left/par));
+  const sy=sys();const par=Math.max(1,S.tables.length);
+  if(S.koBuilt){const left=S.matches.filter(m=>m.stage==='ko'&&m.status!=='done'&&!m.bye).length;
+    if(!left)return null;return fmtTime(Date.now()+avgDuration(S.settings.boKO)*Math.ceil(left/par))}
+  if(sy==='king')return null;
+  if(sy==='swiss'){const perRound=Math.ceil(S.players.length/2);const roundsLeft=S.settings.swissRounds-swissRoundsDone();
+    const left=S.matches.filter(m=>m.stage==='swiss'&&m.status!=='done').length+roundsLeft*perRound;
+    if(!left)return null;return fmtTime(Date.now()+avgDuration(S.settings.boGroup)*Math.ceil(left/par))}
+  if(isTeamSys()){const perRound=Math.min(par,Math.floor(S.players.length/4));const roundsLeft=S.settings.rounds-amRoundsDone();
+    const left=S.matches.filter(m=>m.stage==='round'&&m.status!=='done').length+roundsLeft*perRound;
+    if(!left)return null;const avg=(S.settings.target/11)*8*60000;return fmtTime(Date.now()+avg*Math.ceil(left/par))}
+  const left=S.matches.filter(m=>m.stage==='group'&&m.status!=='done').length;
+  if(!left)return null;return fmtTime(Date.now()+avgDuration(S.settings.boGroup)*Math.ceil(left/par));
 }
+function canFinish(){
+  const sy=sys();
+  if(sy==='king')return S.matches.some(m=>m.stage==='king'&&m.status==='done');
+  if(isTeamSys())return S.matches.filter(m=>m.stage==='round').length>0&&S.matches.filter(m=>m.stage==='round').every(m=>m.status==='done')&&amRoundsDone()>=S.settings.rounds;
+  if(sy==='swiss'&&!S.settings.swissKO)return swissRoundsDone()>=S.settings.swissRounds&&S.matches.filter(m=>m.stage==='swiss').every(m=>m.status==='done');
+  return S.koBuilt&&koFinished();
+}
+/* ---------- Player card ---------- */
+function playerSearch(q){
+  const out=document.getElementById('pSearchOut');if(!out)return;
+  q=(q||'').trim();if(q.length<2){out.innerHTML='';return}
+  const hits=S.players.filter(p=>p.name.includes(q)).slice(0,4);
+  if(!hits.length){out.innerHTML='<div class="card muted" style="margin-bottom:10px">לא נמצא שחקן בשם הזה</div>';return}
+  out.innerHTML=hits.map(p=>playerCard(p.id)).join('');
+}
+function playerCard(pid){
+  const ms=S.matches.filter(m=>matchPids(m).includes(pid));
+  const now=ms.find(m=>m.status==='playing');
+  const nextQ=pendingMatches().map(m=>({m,...priority(m,Date.now())})).sort((a,b)=>b.sc-a.sc).find(x=>matchPids(x.m).includes(pid));
+  const dn=ms.filter(m=>m.status==='done');
+  let pos='';
+  if(sys()==='groups-ko'){const g=S.groups.find(g=>g.pids.includes(pid));if(g){const r=rankGroup(g.id);pos=`${g.name} · מקום ${r.order.indexOf(pid)+1}`}}
+  else if(sys()==='swiss'){const st=swissStandings();pos='מקום '+(st.findIndex(x=>x.id===pid)+1)+' בטבלה'}
+  else if(isTeamSys()){const st=amStandings();const me=st.find(x=>x.id===pid);pos=`מקום ${st.indexOf(me)+1} · ${me?me.pts:0} נקודות`}
+  else pos=`${(S.kingCrowns||{})[pid]||0} ניצחונות`;
+  return `<div class="card" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><h3>${esc(pname(pid))}</h3><span class="pill">${esc(pos)}</span></div>
+  <div style="margin-top:8px">${now?`<b style="color:var(--table)">משחק/ת עכשיו — שולחן ${now.table}</b> מול ${esc(sideName(now,sideIds(now,1).includes(pid)?2:1))}`:
+    nextQ?`הבא בתור: מול ${esc(sideName(nextQ.m,sideIds(nextQ.m,1).includes(pid)?2:1))} <span class="tiny">(${matchLabel(nextQ.m)})</span>`:'<span class="muted">אין משחק ממתין כרגע</span>'}</div>
+  ${dn.length?`<ul class="matchlist">${dn.slice(-6).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span class="sc">${m.score?m.score.join(':'):setsWon(m).join(':')}</span></li>`).join('')}</ul>`:''}</div>`;
+}
+function quickAdd(){
+  modal(`<h2>הוספת שחקן</h2><p class="muted">${sys()==='king'?'ייכנס לסוף התור.':'ישתתף מהסיבוב הבא.'}</p><label>שם</label><input id="qa_n"><div class="row" style="margin-top:14px"><button class="primary" onclick="doQuickAdd()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
+  setTimeout(()=>document.getElementById('qa_n').focus(),50);
+}
+function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n)return;const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
+  if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
+  logEv('נוסף שחקן: '+n);closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
 function tablesTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
   const groupPhase=!S.koBuilt;
   const freeCount=S.tables.filter(t=>!t.matchId).length;
   const q=[];const busy=busyPids();
-  for(const m of pendingMatches()){const pr=priority(m,now);q.push({m,...pr,rest:m._rest,busy:busy.has(m.p1)||busy.has(m.p2)});delete m._rest}
+  for(const m of pendingMatches()){const pr=priority(m,now);q.push({m,...pr,rest:m._rest,busy:matchPids(m).some(id=>busy.has(id))});delete m._rest}
   q.sort((a,b)=>(a.busy-b.busy)||(b.sc-a.sc));
   return `
   <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -605,16 +795,22 @@ function tablesTab(){
     const dur=now-m.startedAt;const stuck=dur>avg*S.settings.stuckMult;
     return `<div class="table busy ${stuck?'stuck':''}" onclick="openResult('${m.id}')">
       <div class="tnum"><span>שולחן ${t.n}</span><span>${matchLabel(m)}</span></div>
-      <div class="players">${esc(pname(m.p1))}<span class="vs">נגד</span>${esc(pname(m.p2))}</div>
+      <div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div>
       <div class="meta"><span>${mins(dur)} דק׳${stuck?' · אולי שכחו לדווח?':''}</span><span>הזן תוצאה ←</span></div></div>`}).join('')}</div>
   <div class="section-h"><h2>בתור (${q.length})</h2><span class="tiny">גררו משחק לשולחן פנוי, או תנו לפיזור לעבוד</span></div>
-  ${q.length?`<ul class="queue">${q.slice(0,40).map(x=>{const m=x.m;const i1=mins(now-idleSince(m.p1)),i2=mins(now-idleSince(m.p2));const cls=v=>v>=30?'idle-bad':v>=20?'idle-warn':'';
+  ${q.length?`<ul class="queue">${q.slice(0,40).map(x=>{const m=x.m;const i1=mins(now-idleSince(sideIds(m,1)[0])),i2=mins(now-idleSince(sideIds(m,2)[0]));const cls=v=>v>=30?'idle-bad':v>=20?'idle-warn':'';
     return `<li style="--gc:${m.stage==='group'?gcolor(m.groupId):'var(--ball)'}" draggable="${x.busy?'false':'true'}" ondragstart="event.dataTransfer.setData('m','${m.id}')" ${x.busy?'style="opacity:.5"':''}>
-      <div class="who"><span class="${cls(i1)}">${esc(pname(m.p1))}</span> – <span class="${cls(i2)}">${esc(pname(m.p2))}</span><div class="why">${matchLabel(m)} · ${x.why.filter(w=>w!=='במנוחה').join(' · ')}${x.busy?' · אחד מהם משחק עכשיו':''}</div></div>
+      <div class="who"><span class="${cls(i1)}">${esc(sideName(m,1))}</span> – <span class="${cls(i2)}">${esc(sideName(m,2))}</span><div class="why">${matchLabel(m)} · ${x.why.filter(w=>w!=='במנוחה').join(' · ')}${x.busy?' · אחד מהם משחק עכשיו':''}</div></div>
       ${x.rest?'<span class="rest">במנוחה</span>':''}</li>`}).join('')}${q.length>40?`<li class="tiny">ועוד ${q.length-40} משחקים…</li>`:''}</ul>`:`<div class="card muted">אין משחקים ממתינים${S.tables.some(t=>t.matchId)?' — מחכים שהשולחנות יתפנו.':'.'}</div>`}`;
 }
-function matchLabel(m){if(m.stage==='group')return `${G(m.groupId)?.name||''} · סיבוב ${m.round}`;return (m.bracket==='cons'?'ניחומים · ':'')+koRoundName(m)}
-function dropMatch(ev,tn){ev.preventDefault();const id=ev.dataTransfer.getData('m');const m=S.matches.find(x=>x.id===id);const t=S.tables.find(x=>x.n===tn);if(!m||!t||t.matchId||m.status!=='pending')return;const busy=busyPids();if(busy.has(m.p1)||busy.has(m.p2)){toast('אחד השחקנים משחק עכשיו');return}startOn(t,m);commit()}
+function matchLabel(m){
+  if(m.stage==='group')return `${G(m.groupId)?.name||''} · סיבוב ${m.round}`;
+  if(m.stage==='swiss')return `סיבוב ${m.round}`;
+  if(m.stage==='round')return `סיבוב ${m.round} · עד ${m.target||S.settings.target}`;
+  if(m.stage==='king')return `מלך השולחן · עד ${m.target||S.settings.kingTarget}`;
+  return (m.bracket==='cons'?'ניחומים · ':'')+koRoundName(m);
+}
+function dropMatch(ev,tn){ev.preventDefault();const id=ev.dataTransfer.getData('m');const m=S.matches.find(x=>x.id===id);const t=S.tables.find(x=>x.n===tn);if(!m||!t||t.matchId||m.status!=='pending')return;const busy=busyPids();if(matchPids(m).some(x=>busy.has(x))){toast('אחד השחקנים משחק עכשיו');return}startOn(t,m);commit()}
 function lockTable(tn){
   const t=S.tables.find(x=>x.n===tn);
   const opts=[{v:'',l:'🔓 פתוח לכולם'},...S.groups.map(g=>({v:g.id,l:'נעול ל'+g.name}))];
@@ -624,11 +820,13 @@ function lockTable(tn){
 
 /* ---------- Result entry ---------- */
 function openResult(mid){
-  const m=S.matches.find(x=>x.id===mid);const need=needSets(m);const bo=need*2-1;
+  const m=S.matches.find(x=>x.id===mid);
+  if(isPointGame(m))return openPointResult(m);
+  const need=needSets(m);const bo=need*2-1;
   const cur=m.sets.slice();while(cur.length<bo)cur.push([null,null]);
   modal(`<h2>${matchLabel(m)}${m.table?' · שולחן '+m.table:''}</h2>
-  <div class="names"><div>${esc(pname(m.p1))}<span class="setsw" id="swA">0</span></div><div></div><div>${esc(pname(m.p2))}<span class="setsw" id="swB">0</span></div></div>
-  <div class="quick"><span class="tiny">מהיר:</span><button onclick="quickFill('${mid}',0)">${esc(pname(m.p1))} ${need}:0</button><button onclick="quickFill('${mid}',1)">${esc(pname(m.p2))} ${need}:0</button></div>
+  <div class="names"><div>${esc(sideName(m,1))}<span class="setsw" id="swA">0</span></div><div></div><div>${esc(sideName(m,2))}<span class="setsw" id="swB">0</span></div></div>
+  <div class="quick"><span class="tiny">מהיר:</span><button onclick="quickFill('${mid}',0)">${esc(sideName(m,1))} ${need}:0</button><button onclick="quickFill('${mid}',1)">${esc(sideName(m,2))} ${need}:0</button></div>
   <div class="sets" id="sets">${cur.map((s,i)=>`<div class="set"><input type="number" inputmode="numeric" min="0" id="a${i}" value="${s[0]??''}" data-i="${i}" data-side="0" placeholder="–"><span class="x">${i+1}</span><input type="number" inputmode="numeric" min="0" id="b${i}" value="${s[1]??''}" data-i="${i}" data-side="1" placeholder="–"></div>`).join('')}</div>
   <div class="hint">מקלידים צד אחד — הצד השני מתמלא לבד. 10 → 12, 11+ → הפרש 2.</div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
@@ -636,8 +834,8 @@ function openResult(mid){
     <button class="ghost" onclick="closeModal()">סגור</button></div>
   <details style="margin-top:14px"><summary class="tiny" style="cursor:pointer">מצבים מיוחדים</summary>
     <div class="row" style="margin-top:8px">
-      <button class="danger" onclick="walkover('${mid}','${m.p2}')">${esc(pname(m.p2))} לא הגיע/ה</button>
-      <button class="danger" onclick="walkover('${mid}','${m.p1}')">${esc(pname(m.p1))} לא הגיע/ה</button>
+      <button class="danger" onclick="walkover('${mid}','${m.p2}')">${esc(sideName(m,2))} לא הגיע/ה</button>
+      <button class="danger" onclick="walkover('${mid}','${m.p1}')">${esc(sideName(m,1))} לא הגיע/ה</button>
       ${m.status==='playing'?`<button class="danger" onclick="retire('${mid}','${m.p2}')">${esc(pname(m.p2))} פרש/ה</button><button class="danger" onclick="retire('${mid}','${m.p1}')">${esc(pname(m.p1))} פרש/ה</button>`:''}
       ${m.status==='playing'?`<button onclick="backToQueue('${mid}')">החזר לתור (הוזן בטעות)</button>`:''}
     </div></details>`);
@@ -677,6 +875,7 @@ function finishMatch(m,winner,sets,flags){
   logEv(`${pname(m.winner)} ניצח/ה את ${pname(m.winner===m.p1?m.p2:m.p1)} ${setsWon(m).join(':')}${m.wo?' (טכני)':''}`);
   if(m.stage==='ko')advanceKO(m);
   S.lastUndo={mid:m.id,prev,tableN:t?t.n:null};
+  if(m.stage==='swiss'&&S.matches.filter(x=>x.stage==='swiss').every(x=>x.status==='done'))swissNextRound();
   closeModal();commit();
   toast(`${pname(m.winner)} ניצח/ה ${setsWon(m).join(':')}`,{label:'ביטול',fn:undoLast});
   autoDistribute();
@@ -699,6 +898,58 @@ function undoLast(){
   Object.assign(m,u.prev);
   if(u.prev.status==='playing'){const t=S.tables.find(x=>x.n===u.tableN);if(t&&!t.matchId){t.matchId=m.id}else{m.status='pending';m.table=null;m.startedAt=null}}
   S.lastUndo=null;hideToast();logEv('בוטלה תוצאה אחרונה');commit();
+}
+
+/* ---------- Point-game result ---------- */
+function openPointResult(m){
+  const tg=m.target||(m.stage==='king'?S.settings.kingTarget:S.settings.target);
+  const sc=m.score||[null,null];
+  modal(`<h2>${matchLabel(m)}${m.table?' · שולחן '+m.table:''}</h2>
+  <div class="names"><div>${esc(sideName(m,1))}</div><div></div><div>${esc(sideName(m,2))}</div></div>
+  <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" max="${tg}" id="pa" value="${sc[0]??''}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" max="${tg}" id="pb" value="${sc[1]??''}" placeholder="–"></div></div>
+  <div class="hint">משחק עד ${tg}. מקלידים צד אחד — השני מתמלא להשלמה.</div>
+  <div class="quick"><span class="tiny">מהיר:</span><button onclick="document.getElementById('pa').value=${tg};document.getElementById('pb').value=0;pRefresh('${m.id}')">${esc(sideName(m,1))} ${tg}:0</button><button onclick="document.getElementById('pb').value=${tg};document.getElementById('pa').value=0;pRefresh('${m.id}')">${esc(sideName(m,2))} ${tg}:0</button></div>
+  <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
+  <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="savePoint('${m.id}')">שמור ופנה שולחן</button><button class="ghost" onclick="closeModal()">סגור</button>
+  ${m.status==='playing'?`<button onclick="backToQueue('${m.id}')">החזר לתור</button>`:''}</div>`);
+  ['pa','pb'].forEach(id=>{const el=document.getElementById(id);
+    el.addEventListener('input',()=>{const other=document.getElementById(id==='pa'?'pb':'pa');const v=el.value===''?null:+el.value;
+      if(m.stage!=='king'&&v!==null&&v>=0&&v<=tg)other.value=Math.max(0,tg-v);
+      pRefresh(m.id)});
+    el.addEventListener('focus',()=>el.select());
+    el.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('saveRes').click()});});
+  pRefresh(m.id);setTimeout(()=>document.getElementById('pa').focus(),50);
+}
+function pRefresh(mid){
+  const m=S.matches.find(x=>x.id===mid);const tg=m.target||(m.stage==='king'?S.settings.kingTarget:S.settings.target);
+  const a=document.getElementById('pa').value===''?null:+document.getElementById('pa').value;
+  const b=document.getElementById('pb').value===''?null:+document.getElementById('pb').value;
+  let err='';
+  if(a===null||b===null)err='';
+  else if(m.stage==='king'){if(Math.max(a,b)<tg)err='המשחק עד '+tg+' נקודות';else if(a===b)err='חייב מנצח'}
+  else if(a+b!==tg)err=`הסכום צריך להיות ${tg} (עכשיו ${a+b})`;
+  else if(a===b)err='תיקו לא אפשרי — שנו נקודה אחת';
+  const e=document.getElementById('resErr');e.style.display=err?'block':'none';e.textContent=err;
+  const ok=a!==null&&b!==null&&!err;document.getElementById('saveRes').disabled=!ok;
+}
+function savePoint(mid){
+  const m=S.matches.find(x=>x.id===mid);
+  const a=+document.getElementById('pa').value,b=+document.getElementById('pb').value;
+  const winner=a>b?1:2;
+  finishPoint(m,[a,b],winner);
+}
+function finishPoint(m,score,side){
+  const prev=JSON.parse(JSON.stringify(m));
+  m.score=score;m.status='done';m.endedAt=Date.now();m.winSide=side;m.winner=sideIds(m,side)[0];
+  const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;
+  matchPids(m).forEach(id=>S.lastPlayed[id]=m.endedAt);
+  if(m.stage==='king'&&t){S.kingHolders[t.n]=m.winner;const loser=sideIds(m,side===1?2:1)[0];S.kingQueue=S.kingQueue.filter(x=>x!==loser);S.kingQueue.push(loser);S.kingCrowns=S.kingCrowns||{};S.kingCrowns[m.winner]=(S.kingCrowns[m.winner]||0)+1}
+  m.table=null;
+  logEv(`${sideName(m,side)} ניצח/ה ${score[0]}:${score[1]}`);
+  S.lastUndo={mid:m.id,prev,tableN:t?t.n:null};
+  closeModal();commit();
+  toast(`${sideName(m,side)} ${score.join(':')}`,{label:'ביטול',fn:undoLast});
+  autoDistribute();
 }
 
 /* ---------- Groups tab ---------- */
@@ -754,6 +1005,150 @@ function doLateEntry(){
   if(S.settings.model==='group'&&!S.tables.some(t=>t.lock===g.id)){const free=S.tables.find(t=>!t.lock);if(free)free.lock=g.id}
   logEv(`שחקן מאוחר: ${name} → ${g.name}`);closeModal();commit();autoDistribute();
 }
+
+
+/* ========================= SWISS ========================= */
+function startSwiss(){
+  S.matches=[];S.byes=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';
+  if(!S.settings.swissRounds)S.settings.swissRounds=suggestSwissRounds(S.players.length);
+  swissNextRound();logEv('התחילה תחרות שוויצרית');goto('live');if(S.settings.auto)autoDistribute();
+}
+function swissStandings(){
+  const ms=S.matches.filter(m=>m.stage==='swiss');
+  const st={};S.players.forEach(p=>st[p.id]=Object.assign({id:p.id,opp:[]},playerStats(p.id,ms)));
+  ms.filter(m=>m.status==='done'&&m.p1&&m.p2).forEach(m=>{if(st[m.p1])st[m.p1].opp.push(m.p2);if(st[m.p2])st[m.p2].opp.push(m.p1)});
+  Object.values(st).forEach(x=>x.buch=x.opp.reduce((a,o)=>a+(st[o]?st[o].mp:0),0));
+  return Object.values(st).sort((a,b)=>b.mp-a.mp||b.buch-a.buch||(b.sw-b.sl)-(a.sw-a.sl)||(b.pw-b.pl)-(a.pw-a.pl)||pname(a.id).localeCompare(pname(b.id)));
+}
+function swissRoundsDone(){const ms=S.matches.filter(m=>m.stage==='swiss');return ms.length?Math.max(...ms.map(m=>m.round)):0}
+function swissNextRound(){
+  const done=swissRoundsDone();
+  if(done>=S.settings.swissRounds)return 0;
+  const played=new Set();S.matches.filter(m=>m.stage==='swiss'&&m.p1&&m.p2).forEach(m=>{played.add(m.p1+'|'+m.p2);played.add(m.p2+'|'+m.p1)});
+  let pool = done===0 ? S.players.slice().sort((a,b)=>(a.seed||9)-(b.seed||9)).map(p=>p.id) : swissStandings().map(x=>x.id);
+  let bye=null;
+  if(pool.length%2){for(let i=pool.length-1;i>=0;i--){if(!(S.byes||[]).includes(pool[i])){bye=pool[i];break}}if(!bye)bye=pool[pool.length-1];pool=pool.filter(x=>x!==bye)}
+  let pairs;
+  if(done===0){pairs=[];const h=pool.length/2;for(let i=0;i<h;i++)pairs.push([pool[i],pool[i+h]])}
+  else pairs=swissPair(pool,played)||fallbackPair(pool);
+  pairs.forEach(([a,b])=>S.matches.push(newMatch({stage:'swiss',round:done+1,p1:a,p2:b})));
+  if(bye){S.byes=(S.byes||[]).concat(bye);const m=newMatch({stage:'swiss',round:done+1,p1:bye,p2:null});m.status='done';m.winner=bye;m.bye=true;S.matches.push(m);logEv(pname(bye)+' קיבל/ה בוחן (Bye) בסיבוב '+(done+1))}
+  logEv('נוצר סיבוב '+(done+1));
+  return pairs.length;
+}
+function swissPair(pool,played,depth){
+  if(!pool.length)return [];
+  if((depth||0)>400)return null;
+  const a=pool[0];
+  for(let i=1;i<pool.length;i++){
+    const b=pool[i];if(played.has(a+'|'+b))continue;
+    const rest=swissPair(pool.filter((x,j)=>j!==0&&j!==i),played,(depth||0)+1);
+    if(rest)return [[a,b],...rest];
+  }
+  return null;
+}
+function fallbackPair(pool){const out=[];for(let i=0;i<pool.length-1;i+=2)out.push([pool[i],pool[i+1]]);return out}
+function swissTab(){
+  const st=swissStandings();const r=swissRoundsDone();const ms=S.matches.filter(m=>m.stage==='swiss');
+  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה</h2><span class="tiny">סיבוב ${r} מתוך ${S.settings.swissRounds}</span></div>
+  <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>מש׳</th><th>נצ׳</th><th>הפ׳</th><th>נק׳</th><th>בוכהולץ</th><th>מערכות</th><th>נקודות</th></tr>
+  ${st.map((x,i)=>`<tr class="${S.settings.swissKO&&i<S.settings.swissAdvance?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.played}</td><td>${x.w}</td><td>${x.l}</td><td><b>${x.mp}</b></td><td>${x.buch}</td><td>${x.sw}:${x.sl}</td><td>${x.pw}:${x.pl}</td></tr>`).join('')}</table></div>
+  <p class="tiny" style="margin-top:8px">בוכהולץ = סכום נקודות המשחק של כל היריבים שלך — שובר השוויון המקובל בשיטה השוויצרית.</p></div>
+  <div class="card" style="margin-top:12px"><h2>משחקים</h2>
+  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(pname(m.p1))} ${m.bye?'':'– '+esc(pname(m.p2))}</span><span>${m.bye?'<span class="tiny">בוחן — ניצחון אוטומטי</span>':m.status==='done'?`<span class="sc">${setsWon(m).join(':')}</span> <button class="edit" onclick="openResult('${m.id}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${m.table}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
+}
+
+/* ========================= AMERICANO / MEXICANO ========================= */
+function startAmericano(){
+  S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';S.settings.format='doubles';
+  americanoRound(1);logEv('התחיל '+SYSTEMS[sys()].n);goto('live');if(S.settings.auto)autoDistribute();
+}
+function amStandings(){
+  const st={};S.players.forEach(p=>st[p.id]={id:p.id,pts:0,against:0,g:0,w:0});
+  S.matches.filter(m=>m.stage==='round'&&m.status==='done').forEach(m=>{
+    const [a,b]=m.score||[0,0];
+    sideIds(m,1).forEach(id=>{if(!st[id])return;st[id].pts+=a;st[id].against+=b;st[id].g++;if(a>b)st[id].w++});
+    sideIds(m,2).forEach(id=>{if(!st[id])return;st[id].pts+=b;st[id].against+=a;st[id].g++;if(b>a)st[id].w++});
+  });
+  return Object.values(st).sort((x,y)=>y.pts-x.pts||y.w-x.w||(y.pts-y.against)-(x.pts-x.against)||pname(x.id).localeCompare(pname(y.id)));
+}
+function americanoRound(r){
+  const n=S.players.length;const courts=Math.min(S.settings.tables,Math.floor(n/4));
+  if(courts<1){toast('צריך לפחות 4 שחקנים לשולחן אחד');return 0}
+  const played={};S.players.forEach(p=>played[p.id]=0);
+  const prev=S.matches.filter(m=>m.stage==='round');
+  prev.forEach(m=>matchPids(m).forEach(id=>{if(played[id]!=null)played[id]++}));
+  let order = (sys()==='mexicano'&&r>1) ? amStandings().map(x=>x.id) : shuffle(S.players.map(p=>p.id));
+  const need=courts*4;
+  if(order.length>need){
+    const bySit=order.slice().sort((a,b)=>played[a]-played[b]);
+    const sit=new Set(bySit.slice(need));
+    order=order.filter(id=>!sit.has(id));
+    S.sitOut=[...sit];
+  } else {order=order.slice(0,Math.floor(order.length/4)*4);S.sitOut=S.players.map(p=>p.id).filter(id=>!order.includes(id))}
+  const partnered={};prev.forEach(m=>{[sideIds(m,1),sideIds(m,2)].forEach(t=>{if(t.length===2){partnered[t[0]+'|'+t[1]]=1;partnered[t[1]+'|'+t[0]]=1}})});
+  for(let i=0;i<order.length;i+=4){
+    const g=order.slice(i,i+4);let t1,t2;
+    if(sys()==='mexicano'&&r>1){t1=[g[0],g[3]];t2=[g[1],g[2]]}
+    else{
+      const opts=[[[g[0],g[1]],[g[2],g[3]]],[[g[0],g[2]],[g[1],g[3]]],[[g[0],g[3]],[g[1],g[2]]]];
+      const fresh=opts.find(o=>!partnered[o[0][0]+'|'+o[0][1]]&&!partnered[o[1][0]+'|'+o[1][1]]);
+      const pick=fresh||opts[Math.floor(Math.random()*3)];t1=pick[0];t2=pick[1];
+    }
+    S.matches.push(newMatch({stage:'round',round:r,t1,t2,target:S.settings.target,score:null}));
+  }
+  logEv('נוצר סיבוב '+r);
+  return 1;
+}
+function amRoundsDone(){const ms=S.matches.filter(m=>m.stage==='round');return ms.length?Math.max(...ms.map(m=>m.round)):0}
+function amTab(){
+  const st=amStandings();const r=amRoundsDone();const ms=S.matches.filter(m=>m.stage==='round');
+  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה אישית</h2><span class="tiny">סיבוב ${r} מתוך ${S.settings.rounds}</span></div>
+  <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>משחקים</th><th>נצ׳</th><th>נקודות</th><th>נגד</th><th>הפרש</th></tr>
+  ${st.map((x,i)=>`<tr class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.g}</td><td>${x.w}</td><td><b>${x.pts}</b></td><td>${x.against}</td><td>${x.pts-x.against>0?'+':''}${x.pts-x.against}</td></tr>`).join('')}</table></div>
+  <p class="tiny" style="margin-top:8px">הנקודות אישיות — מה שצברת נשאר שלך, לא משנה עם מי שיחקת.</p></div>
+  <div class="card" style="margin-top:12px"><h2>סיבובים</h2>
+  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span>${m.status==='done'?`<span class="sc">${(m.score||[]).join(':')}</span> <button class="edit" onclick="openResult('${m.id}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${m.table}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
+}
+
+/* ========================= KING OF THE TABLE ========================= */
+function startKing(){
+  S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';S.kingCrowns={};S.kingHolders={};
+  S.kingQueue=shuffle(S.players.map(p=>p.id));
+  logEv('התחיל מלך השולחן');goto('live');kingFill();commit();
+}
+function kingFill(){
+  let n=0;const busy=busyPids();
+  for(const t of S.tables){
+    if(t.matchId)continue;
+    let a=S.kingHolders[t.n];
+    if(a&&(busy.has(a)||!P(a)))a=null;
+    let q=S.kingQueue.filter(id=>!busy.has(id)&&P(id));
+    if(!a){a=q.shift();if(!a)continue;S.kingQueue=S.kingQueue.filter(x=>x!==a);busy.add(a)}
+    q=S.kingQueue.filter(id=>!busy.has(id)&&P(id)&&id!==a);
+    const b=q[0];if(!b)continue;
+    S.kingQueue=S.kingQueue.filter(x=>x!==b);busy.add(b);
+    S.kingHolders[t.n]=a;
+    const m=newMatch({stage:'king',p1:a,p2:b,target:S.settings.kingTarget,score:null});
+    S.matches.push(m);startOn(t,m);n++;
+  }
+  return n;
+}
+function kingTab(){
+  const cr=S.kingCrowns||{};
+  const st=S.players.map(p=>({id:p.id,w:cr[p.id]||0,g:S.matches.filter(m=>m.stage==='king'&&m.status==='done'&&matchPids(m).includes(p.id)).length}))
+    .sort((a,b)=>b.w-a.w||a.g-b.g||pname(a.id).localeCompare(pname(b.id)));
+  const done=S.matches.filter(m=>m.stage==='king'&&m.status==='done');
+  return `<div class="card"><h2>מלכים</h2>
+  <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>ניצחונות</th><th>משחקים</th><th>אחוז</th></tr>
+  ${st.map((x,i)=>`<tr class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}${Object.values(S.kingHolders||{}).includes(x.id)?' 👑':''}</td><td><b>${x.w}</b></td><td>${x.g}</td><td>${x.g?Math.round(x.w/x.g*100):0}%</td></tr>`).join('')}</table></div></div>
+  <div class="card" style="margin-top:12px"><h2>התור (${(S.kingQueue||[]).length})</h2><div class="row" style="gap:6px;margin-top:6px">${(S.kingQueue||[]).map((id,i)=>`<span class="pill">${i+1}. ${esc(pname(id))}</span>`).join('')||'<span class="muted">ריק</span>'}</div></div>
+  <div class="card" style="margin-top:12px"><h2>משחקים אחרונים</h2><ul class="matchlist">${done.slice().reverse().slice(0,25).map(m=>`<li><span>${esc(sideName(m,m.winSide||1))} <span class="tiny">ניצח/ה את</span> ${esc(sideName(m,m.winSide===1?2:1))}</span><span class="sc">${(m.score||[]).join(':')}</span></li>`).join('')||'<li class="muted">עדיין אין</li>'}</ul></div>`;
+}
+function endKing(){if(!confirm('לסיים את מלך השולחן ולעבור לפודיום?'))return;S.matches.filter(m=>m.status==='playing').forEach(m=>{m.status='pending';const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null});goto('final')}
 
 /* ========================= KNOCKOUT ========================= */
 function seedSlots(n){let a=[1];while(a.length<n){const m=a.length*2+1;const b=[];for(const x of a){b.push(x,m-x)}a=b}return a}// slot order: position i -> seed number
@@ -811,6 +1206,14 @@ function buildBracket(entrants,bracket){
   ms.filter(m=>m.koRound===0).forEach(m=>{if(m.p1&&!m.p2){m.status='done';m.winner=m.p1;m.bye=true;advanceKO(m)}else if(m.p2&&!m.p1){m.status='done';m.winner=m.p2;m.bye=true;advanceKO(m)}else if(!m.p1&&!m.p2){m.status='done';m.bye=true}});
   return rounds;
 }
+function buildSwissKO(){
+  const st=swissStandings().slice(0,S.settings.swissAdvance);
+  const ent=st.map((x,i)=>({pid:x.id,g:i,pos:0}));
+  S.matches=S.matches.filter(m=>m.stage!=='ko');
+  S.koRounds=buildBracket(ent,'main');
+  S.koBuilt=true;S.tables.forEach(t=>t.lock=null);S.phaseStart=Date.now();S.tab='bracket';
+  logEv('נבנה נוקאאוט למובילי השוויצרית');commit();autoDistribute();
+}
 function advanceKO(m){
   const rounds=m.bracket==='main'?S.koRounds:S.consRounds;
   const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));
@@ -839,6 +1242,18 @@ function logTab(){return `<ul class="plist">${S.log.map(l=>`<li><span class="tin
 
 /* ========================= FINAL ========================= */
 function finalRanking(){
+  const sy=sys();
+  if(isTeamSys()){const st=amStandings();let place=1;return st.map((x,i)=>{if(i>0&&st[i-1].pts!==x.pts)place=i+1;return {p:P(x.id),place,shared:st.filter(y=>y.pts===x.pts).length>1,extra:x.pts+' נק׳'}})}
+  if(sy==='king'){const cr=S.kingCrowns||{};const st=S.players.map(p=>({p,w:cr[p.id]||0})).sort((a,b)=>b.w-a.w);let place=1;return st.map((x,i)=>{if(i>0&&st[i-1].w!==x.w)place=i+1;return {p:x.p,place,shared:st.filter(y=>y.w===x.w).length>1,extra:x.w+' ניצחונות'}})}
+  if(sy==='swiss'&&!S.koBuilt){const st=swissStandings();return st.map((x,i)=>({p:P(x.id),place:i+1,shared:false,extra:x.mp+' נק׳'}))}
+  if(sy==='swiss'&&S.koBuilt){
+    const st=swissStandings();const main=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='main'&&!m.third);
+    const fin=main.find(m=>m.koRound===S.koRounds-1);
+    const elim={};main.forEach(m=>{if(m.status!=='done'||m.bye)return;const l=m.winner===m.p1?m.p2:m.p1;if(l)elim[l]=m.koRound});
+    const tier=id=>{if(fin&&fin.winner===id)return 0;if(fin&&fin.status==='done'&&(fin.p1===id||fin.p2===id))return 1;if(elim[id]!=null)return 10+(S.koRounds-elim[id]);return 100};
+    const ord=S.players.slice().sort((a,b)=>tier(a.id)-tier(b.id)||st.findIndex(x=>x.id===a.id)-st.findIndex(x=>x.id===b.id));
+    let place=1;return ord.map((p,i)=>{if(i>0&&tier(ord[i-1].id)!==tier(p.id))place=i+1;return {p,place,shared:ord.filter(x=>tier(x.id)===tier(p.id)).length>1&&tier(p.id)>1,extra:''}});
+  }
   const res=[];const main=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='main'&&!m.third);
   const eliminatedAt={};for(const m of main){if(m.status!=='done'||m.bye)continue;const l=m.winner===m.p1?m.p2:m.p1;eliminatedAt[l]=m.koRound}
   const finalM=main.find(m=>m.koRound===S.koRounds-1);
@@ -861,15 +1276,34 @@ function renderFinal(app){
   const p=i=>top[i]?esc(top[i].p.name):'';
   app.innerHTML=`<h1>🏆 ${esc(S.settings.name)||'סיום התחרות'}</h1>
   <div class="podium"><div class="pod p2"><div class="name">${p(1)}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${p(0)}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${p(2)}${top[3]&&top[3].place===top[2].place?'<br>'+p(3):''}</div><div class="block">3</div></div></div>
-  <div class="card"><h2 style="margin-bottom:8px">דירוג סופי</h2><table class="st"><tr><th>מקום</th><th style="text-align:right">שם</th><th>מועדון</th><th>בית</th></tr>${r.map(x=>`<tr><td>${x.place}${x.shared?'=':''}</td><td class="name">${esc(x.p.name)}</td><td>${esc(x.p.club||'')}</td><td>${esc(S.groups.find(g=>g.pids.includes(x.p.id))?.name||'')}</td></tr>`).join('')}</table></div>
-  <div class="toolbar"><button onclick="exportCSV()">⬇ ייצוא CSV</button><button onclick="window.print()">🖨 הדפסה</button><button onclick="exportJSON()">⬇ גיבוי JSON</button><button class="ghost" onclick="goto('live')">→ חזרה למשחקים</button></div>`;
+  <div class="card"><h2 style="margin-bottom:8px">דירוג סופי</h2><table class="st"><tr><th>מקום</th><th style="text-align:right">שם</th><th>מועדון</th><th>${sys()==='groups-ko'?'בית':'תוצאה'}</th></tr>${r.map(x=>`<tr><td>${x.place}${x.shared?'=':''}</td><td class="name">${esc(x.p.name)}</td><td>${esc(x.p.club||'')}</td><td>${esc(x.extra!==undefined&&x.extra!==''?x.extra:(S.groups.find(g=>g.pids.includes(x.p.id))?.name||''))}</td></tr>`).join('')}</table></div>
+  <div class="toolbar"><button class="primary big" onclick="shareSummary()">📤 שתף לוואטסאפ</button><button onclick="exportCSV()">⬇ ייצוא CSV</button><button onclick="window.print()">🖨 הדפסה</button><button onclick="exportJSON()">⬇ גיבוי JSON</button><button class="ghost" onclick="goto('live')">→ חזרה למשחקים</button></div>`;
   burst();
 }
 function burst(){if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const c=document.createElement('canvas');c.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:99';c.width=innerWidth;c.height=innerHeight;document.body.appendChild(c);const x=c.getContext('2d');const ps=Array.from({length:120},()=>({x:innerWidth/2,y:innerHeight*0.35,vx:(Math.random()-.5)*14,vy:-Math.random()*14-4,c:['#F28C28','#1F6F4A','#fff','#2F6DB5'][Math.floor(Math.random()*4)],s:6+Math.random()*6}));let t=0;(function f(){x.clearRect(0,0,c.width,c.height);ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.35;x.fillStyle=p.c;x.fillRect(p.x,p.y,p.s,p.s)});if(++t<90)requestAnimationFrame(f);else c.remove()})()}
+function shareSummary(){
+  const r=finalRanking();const sy=sys();
+  const lines=[`🏓 ${S.settings.name||'תחרות'} · ${S.settings.date}`,`שיטה: ${SYSTEMS[sy].n}`,''];
+  const finished=canFinish();
+  if(finished){
+    lines.push('🏆 תוצאות:');
+    r.slice(0,8).forEach(x=>lines.push(`${['🥇','🥈','🥉'][x.place-1]||x.place+'.'} ${x.p.name}${x.extra?' — '+x.extra:''}`));
+  } else {
+    const playing=S.matches.filter(m=>m.status==='playing');
+    lines.push('▶ משחקים עכשיו:');
+    playing.forEach(m=>lines.push(`שולחן ${m.table}: ${sideName(m,1)} – ${sideName(m,2)}`));
+    if(!playing.length)lines.push('אין משחקים פעילים');
+    const nq=pendingMatches().map(m=>({m,...priority(m,Date.now())})).sort((a,b)=>b.sc-a.sc).slice(0,4);
+    if(nq.length){lines.push('','⏭ הבאים בתור:');nq.forEach(x=>lines.push(`${sideName(x.m,1)} – ${sideName(x.m,2)}`))}
+  }
+  const txt=lines.join('\n');
+  if(navigator.share){navigator.share({text:txt}).catch(()=>{})}
+  else window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
 function exportCSV(){
   const rows=[['מקום','שם','מועדון','בית']];finalRanking().forEach(x=>rows.push([x.place,x.p.name,x.p.club||'',S.groups.find(g=>g.pids.includes(x.p.id))?.name||'']));
   rows.push([]);rows.push(['שלב','בית/סיבוב','שחקן 1','שחקן 2','מערכות','פירוט','מנצח']);
-  S.matches.filter(m=>m.status==='done'&&!m.bye).forEach(m=>rows.push([m.stage==='group'?'בתים':'נוקאאוט',matchLabel(m),pname(m.p1),pname(m.p2),setsWon(m).join(':'),m.sets.map(s=>s.join('-')).join(' '),pname(m.winner)+(m.wo?' (טכני)':'')]));
+  S.matches.filter(m=>m.status==='done'&&!m.bye).forEach(m=>rows.push([({group:'בתים',ko:'נוקאאוט',swiss:'שוויצרית',round:'סיבוב',king:'מלך השולחן'})[m.stage]||m.stage,matchLabel(m),sideName(m,1),sideName(m,2),m.score?m.score.join(':'):setsWon(m).join(':'),m.score?'':(m.sets||[]).map(x=>x.join('-')).join(' '),m.score?sideName(m,m.winSide||1):pname(m.winner)+(m.wo?' (טכני)':'')]));
   const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   dl(new Blob([csv],{type:'text/csv;charset=utf-8'}),(S.settings.name||'tournament')+'.csv');
 }
@@ -950,11 +1384,45 @@ function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled
 
 /* ========================= PUBLIC DISPLAY ========================= */
 let pubTimer=null;
-function openPublic(){const el=document.getElementById('public');const draw=()=>{const now=Date.now();const busy=busyPids();const q=pendingMatches().filter(m=>!busy.has(m.p1)&&!busy.has(m.p2)).map(m=>({m,...priority(m,now)}));q.forEach(x=>delete x.m._rest);q.sort((a,b)=>b.sc-a.sc);
-  el.innerHTML=`<div class="public"><h1><span>${esc(S.settings.name)||'תן לי שולחן'}</span><button class="ghost" style="color:#fff;font-size:16px" onclick="closePublic()">✕ סגור</button></h1>
-  <div class="tables">${S.tables.map(t=>{const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;return m?`<div class="table"><div class="tnum"><span>שולחן ${t.n}</span><span>${matchLabel(m)}</span></div><div class="players">${esc(pname(m.p1))}<span class="vs">נגד</span>${esc(pname(m.p2))}</div><div class="meta"></div></div>`:`<div class="table free"><div class="tnum"><span>שולחן ${t.n}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>
-  <div class="next"><h2>להתכונן — הבאים בתור</h2><ul style="padding:0;margin:0">${q.slice(0,6).map(x=>`<li><span>${esc(pname(x.m.p1))} נגד ${esc(pname(x.m.p2))}</span><small>${matchLabel(x.m)}</small></li>`).join('')||'<li>אין משחקים ממתינים</li>'}</ul></div></div>`};
-  draw();pubTimer=setInterval(draw,15000);if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+let pubScreen=0;
+const PUB_SCREENS=['now','next','table','results'];
+function openPublic(){
+  pubScreen=0;pubDraw();
+  pubTimer=setInterval(()=>{pubScreen=(pubScreen+1)%PUB_SCREENS.length;pubDraw()},14000);
+  if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
+}
+function pubDraw(){
+  const el=document.getElementById('public');if(!el)return;
+  const now=Date.now();const busy=busyPids();
+  const q=pendingMatches().filter(m=>!matchPids(m).some(id=>busy.has(id))).map(m=>({m,...priority(m,now)}));
+  q.forEach(x=>delete x.m._rest);q.sort((a,b)=>b.sc-a.sc);
+  const done=canFinish();
+  let screens=done?['podium','table','results']:PUB_SCREENS;
+  const sc=screens[pubScreen%screens.length];
+  const head=`<h1><span>${esc(S.settings.name)||'תן לי שולחן'}</span><span style="font-size:18px;opacity:.6">${screens.map((x,i)=>i===pubScreen%screens.length?'●':'○').join(' ')}</span><button class="ghost" style="color:#fff;font-size:16px" onclick="closePublic()">✕ סגור</button></h1>`;
+  let body='';
+  if(sc==='now'){
+    body=`<div class="tables">${S.tables.map(t=>{const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
+      return m?`<div class="table"><div class="tnum"><span>שולחן ${t.n}</span><span>${matchLabel(m)}</span></div><div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div><div class="meta"></div></div>`
+      :`<div class="table free"><div class="tnum"><span>שולחן ${t.n}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>`;
+  } else if(sc==='next'){
+    body=`<div class="next"><h2>להתכונן — הבאים בתור</h2><ul style="padding:0;margin:0">${q.slice(0,8).map(x=>`<li><span>${esc(sideName(x.m,1))} נגד ${esc(sideName(x.m,2))}</span><small>${matchLabel(x.m)}</small></li>`).join('')||'<li>אין משחקים ממתינים</li>'}</ul></div>`;
+  } else if(sc==='results'){
+    const dn=S.matches.filter(m=>m.status==='done'&&!m.bye).slice(-8).reverse();
+    body=`<div class="next"><h2>תוצאות אחרונות</h2><ul style="padding:0;margin:0">${dn.map(m=>`<li><span>${esc(sideName(m,m.winSide||(m.winner===sideIds(m,1)[0]?1:2)))} ניצח/ה</span><small>${m.score?m.score.join(':'):setsWon(m).join(':')} · ${esc(sideName(m,(m.winSide||(m.winner===sideIds(m,1)[0]?1:2))===1?2:1))}</small></li>`).join('')||'<li>עדיין אין תוצאות</li>'}</ul></div>`;
+  } else if(sc==='table'){
+    const sy=sys();let rows=[];
+    if(sy==='groups-ko'&&!S.koBuilt){rows=S.groups.map(g=>{const r=rankGroup(g.id);return `<div style="margin-bottom:14px"><h2 style="font-size:22px">${g.name}</h2>${r.order.map((id,i)=>`<div style="font-size:22px;padding:4px 0;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.12)"><span>${i+1}. ${esc(pname(id))}</span><span>${r.stats[id].mp}</span></div>`).join('')}</div>`});
+      body=`<div style="columns:${Math.min(3,S.groups.length)};column-gap:30px">${rows.join('')}</div>`;
+    } else {
+      const st=sy==='swiss'?swissStandings().map(x=>[pname(x.id),x.mp+' נק׳']):isTeamSys()?amStandings().map(x=>[pname(x.id),x.pts+' נק׳']):sy==='king'?S.players.map(p=>[p.name,((S.kingCrowns||{})[p.id]||0)+' נצ׳']).sort((a,b)=>parseInt(b[1])-parseInt(a[1])):finalRanking().map(x=>[x.p.name,x.extra||'']);
+      body=`<div class="next"><h2>טבלה</h2><ul style="padding:0;margin:0">${st.slice(0,12).map((x,i)=>`<li><span>${i+1}. ${esc(x[0])}</span><small>${esc(x[1])}</small></li>`).join('')}</ul></div>`;
+    }
+  } else if(sc==='podium'){
+    const r=finalRanking();
+    body=`<div class="podium" style="min-height:300px"><div class="pod p2"><div class="name" style="color:#fff">${esc(r[1]?r[1].p.name:'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name" style="color:#fff">${esc(r[0]?r[0].p.name:'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name" style="color:#fff">${esc(r[2]?r[2].p.name:'')}</div><div class="block">3</div></div></div>`;
+  }
+  el.innerHTML=`<div class="public">${head}${body}</div>`;
 }
 function closePublic(){clearInterval(pubTimer);document.getElementById('public').innerHTML='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 
