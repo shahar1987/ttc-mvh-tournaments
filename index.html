@@ -1629,7 +1629,7 @@ window.addEventListener('fb-ready',()=>{
 });
 function watchList(){
   const q=FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc'));
-  unsubList=FB.onSnapshot(q,snap=>{LIST=snap.docs.filter(d=>d.id!=='__connection_test__').map(d=>({id:d.id,...d.data()}));if(!TID)render()},
+  unsubList=FB.onSnapshot(q,snap=>{LIST=snap.docs.filter(d=>d.id!=='zz-connection-test').map(d=>({id:d.id,...d.data()}));if(!TID)render()},
     e=>{console.error(e);syncErr=e;setSync('error');if(!TID)render()});
 }
 function renderLogin(app){
@@ -1715,7 +1715,7 @@ async function diagnostics(){
   try{await FB.getDocs(FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc')));readOk=true}
   catch(e){readErr=e.code||e.message}
   add(readOk,'קריאת רשימת התחרויות',readErr);
-  try{await FB.setDoc(FB.doc(FB.db,'tournaments','__connection_test__'),{ping:Date.now(),by:USER?USER.uid:''},{merge:true});writeOk=true}
+  try{await FB.setDoc(FB.doc(FB.db,'tournaments','zz-connection-test'),{ping:Date.now(),by:USER?USER.uid:''},{merge:true});writeOk=true}
   catch(e){writeErr=e.code||e.message}
   add(writeOk,'כתיבה לענן',writeErr);
   let localKB=0;try{localKB=Math.round((localStorage.getItem(KEY+'.'+TID)||'').length/1024)}catch(e){}
