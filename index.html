@@ -1703,7 +1703,7 @@ window.addEventListener('offline',()=>setSync('offline'));
 window.addEventListener('beforeunload',e=>{if(syncState==='error'||syncState==='pending'||syncState==='saving'||syncState==='offline'){e.preventDefault();e.returnValue=''}});
 
 /* ---------- Connection diagnostics ---------- */
-const RULE_TEXT=`match /tournaments/{id} {\n  allow read, write: if request.auth != null;\n}`;
+const RULE_TEXT=`match /tournaments/{id} {\n  allow read, write: if hasProfile();\n}`;
 async function diagnostics(){
   modal('<h2>בדיקת שמירה בענן</h2><p class="muted">בודק…</p>');
   const rows=[];
@@ -1721,7 +1721,8 @@ async function diagnostics(){
   let localKB=0;try{localKB=Math.round((localStorage.getItem(KEY+'.'+TID)||'').length/1024)}catch(e){}
   const allOk=readOk&&writeOk;
   const fix=(!readOk||!writeOk)?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
-    חסרה הרשאה ל-Firestore. בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, ולהוסיף בתוך הבלוק <code>match /databases/{database}/documents { … }</code> הקיים את השורות הבאות, ואז Publish.
+    חסרה הרשאה ל-Firestore. בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, ולהוסיף בתוך הבלוק <code>match /databases/{database}/documents { … }</code> הקיים את השורות הבאות, ואז Publish.<br>
+    הכללים מנוהלים כקובץ <code>firestore.rules</code> במאגר של אפליקציית הנוכחות — כדאי להוסיף אותן גם שם, אחרת העדכון הבא ימחק אותן.
     <pre style="background:#fff;border:1px solid var(--edge);border-radius:8px;padding:10px;overflow:auto;font-size:12px;direction:ltr;text-align:left">${esc(RULE_TEXT.replace(/\\n/g,'\n'))}</pre>
     <button onclick="navigator.clipboard.writeText(${JSON.stringify(RULE_TEXT).replace(/"/g,'&quot;')}.replace(/\\n/g,String.fromCharCode(10)));toast('הועתק')">העתקת הכלל</button></div>`:'';
   modal(`<h2>בדיקת שמירה בענן</h2>
