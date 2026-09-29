@@ -5,27 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>תן לי שולחן — מועדון טניס שולחן מבואות החרמון</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#0F4C81">
+<meta name="theme-color" content="#1B2A41">
 <link rel="icon" href="./icon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="תן לי שולחן">
 <link rel="apple-touch-icon" href="./icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=Heebo:wght@500;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ============ tokens ============ */
 :root{
-  --felt:#0F4C81; --felt-2:#14679F; --felt-3:#0A3A63;
-  --chalk:#FFFFFF; --ball:#C2410C; --ball-2:#9A3412; --ball-soft:#FFEDD5;
-  --rubber:#B4291F; --pip:#171717;
-  --ink:#111827; --ink-2:#374151; --ink-3:#4B5563;
-  --paper:#F4F6F8; --card:#FFFFFF; --edge:#E2E8F0; --rule:#EEF1F4;
-  --ok:#166534; --warn:#92400E; --bad:#B91C1C;
+  /* אותה פלטה כמו אפליקציית הנוכחות (tailwind.config.js במאגר ttc-mvh-attendance) */
+  --navy:#1B2A41;                                  /* כותרת עליונה */
+  --act:#3B5A7F; --act-2:#2F4A6E; --act-soft:#EAF0F5; /* פעולה ראשית */
+  --felt:#2F4A6E; --felt-2:#3B5A7F; --felt-3:#1B2A41; /* שולחנות */
+  --chalk:#FFFFFF; --ball:#9A6B18; --ball-2:#7E5710; --ball-soft:#F7EFDD; /* ענבר: "שים לב", מקום ראשון */
+  --rubber:#B24B41; --pip:#1B242B;
+  --ink:#1B242B; --ink-2:#3F4C55; --ink-3:#606E77;
+  --paper:#F4F6F5; --card:#FFFFFF; --edge:#D9DFDE; --rule:#EDF0EF;
+  --ok:#2E7D6B; --warn:#9A6B18; --bad:#B24B41;
   --r-soft:16px; --r-hard:6px; --r-pill:999px;
-  --shadow-1:0 1px 2px rgba(17,24,39,.06);
-  --shadow-2:0 10px 28px -12px rgba(17,24,39,.28);
-  --tap:44px;
+  --shadow-1:0 1px 2px rgba(27,36,43,.05);
+  --shadow-2:0 10px 28px -12px rgba(27,36,43,.25);
+  --tap:48px;
   --gut:clamp(12px,3vw,26px);
   --ease:cubic-bezier(.22,.68,.28,1);
 }
@@ -40,10 +43,10 @@ body{
   overscroll-behavior-y:none;
 }
 h1,h2,h3,h4{margin:0;line-height:1.12;font-weight:600;letter-spacing:-.01em}
-h1{font-family:"Heebo",system-ui,sans-serif;font-weight:800;font-size:clamp(24px,3.4vw,34px);letter-spacing:-.01em}
+h1{font-family:"Assistant",system-ui,sans-serif;font-weight:800;font-size:clamp(24px,3.4vw,34px);letter-spacing:-.01em}
 h2{font-size:clamp(18px,1.6vw,22px)}
 h3{font-size:clamp(16px,1.2vw,18px)}
-.num{font-family:"Heebo",system-ui,sans-serif;font-weight:800;font-variant-numeric:tabular-nums}
+.num{font-family:"Assistant",system-ui,sans-serif;font-weight:800;font-variant-numeric:tabular-nums}
 
 /* ============ controls ============ */
 button{
@@ -52,27 +55,26 @@ button{
   background:var(--card);color:var(--ink);
   transition:background .16s var(--ease),border-color .16s var(--ease),transform .1s var(--ease),box-shadow .16s var(--ease);
 }
-button:hover{border-color:#BFCCC3;background:#FAFBFC}
+button:hover{border-color:#B7C1BF;background:#FAFBFB}
 button:active{transform:scale(.975)}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--ball);outline-offset:2px;border-radius:8px}
-button.primary{background:var(--ball);color:#fff;border-color:var(--ball);font-weight:600;box-shadow:0 2px 0 var(--ball-2)}
-button.primary:hover{background:var(--ball-2);border-color:var(--ball-2)}
-button.primary:active{box-shadow:none;transform:translateY(2px) scale(.99)}
-button.green{background:var(--felt);color:var(--chalk);border-color:var(--felt);font-weight:600;box-shadow:0 2px 0 var(--felt-3)}
-button.green:hover{background:var(--felt-2);border-color:var(--felt-2)}
-button.green:active{box-shadow:none;transform:translateY(2px) scale(.99)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--act);outline-offset:2px;border-radius:8px}
+button.primary,button.green{background:var(--act);color:#fff;border-color:var(--act);font-weight:700;box-shadow:0 6px 16px -8px rgba(27,42,65,.55)}
+button.primary:hover,button.green:hover{background:var(--act-2);border-color:var(--act-2)}
+button.primary:active,button.green:active{box-shadow:none;transform:scale(.985)}
+button.outline{background:#fff;color:var(--act);border-color:#A9BDD4;font-weight:700}
+button.outline:hover{background:var(--act-soft);border-color:var(--act)}
 button.ghost{background:transparent;border-color:transparent;color:var(--ink-2);box-shadow:none}
-button.ghost:hover{background:rgba(12,26,21,.05);border-color:transparent}
-button.danger{color:var(--bad);border-color:#EBC9C5}
-button.danger:hover{background:#FCF1EF;border-color:#DFA9A2}
+button.ghost:hover{background:rgba(27,36,43,.05);border-color:transparent}
+button.danger{color:var(--bad);border-color:#E5B8B3}
+button.danger:hover{background:#F8EAE8;border-color:#D99B94}
 button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
-button.big{padding:15px 24px;font-size:clamp(16px,1.1vw,18px);min-height:52px}
+button.big{padding:15px 24px;font-size:clamp(17px,1.1vw,19px);min-height:56px}
 input,select,textarea{
   font:inherit;padding:11px 13px;min-height:var(--tap);
   border:1px solid var(--edge);border-radius:12px;background:#fff;color:var(--ink);width:100%;
   transition:border-color .16s var(--ease),box-shadow .16s var(--ease);
 }
-input:hover,select:hover{border-color:#C4D0C8}
+input:hover,select:hover{border-color:#B7C1BF}
 input[type=number]{-moz-appearance:textfield}
 input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 label{display:block;font-weight:500;margin:16px 0 6px;font-size:.94em}
@@ -82,39 +84,36 @@ label{display:block;font-weight:500;margin:16px 0 6px;font-size:.94em}
 
 /* ============ shell ============ */
 header{
-  background:var(--felt);color:var(--chalk);
-  padding:calc(12px + env(safe-area-inset-top)) var(--gut) 0;
-  border-bottom:3px solid var(--chalk);
+  background:var(--navy);color:var(--chalk);
+  padding:calc(12px + env(safe-area-inset-top)) var(--gut) 12px;
   position:sticky;top:0;z-index:30;
 }
-.brand{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.brand .logo{display:flex;align-items:center;gap:11px}
-.brand .logo i{
-  width:20px;height:20px;border-radius:50%;background:var(--ball);flex:none;
-  box-shadow:inset -5px -5px 0 rgba(0,0,0,.16),0 0 0 3px rgba(194,65,12,.18);
-}
-.brand .logotext{display:flex;flex-direction:column;line-height:1.3;min-width:0}
-.brand .club{font-family:"Heebo",sans-serif;font-weight:800;font-size:clamp(15px,1.7vw,19px);letter-spacing:0}
-.brand .club .dedic{font-weight:600;opacity:.88;font-size:.92em}
-.brand .tagline{font-family:"Assistant",sans-serif;font-weight:400;opacity:.78;font-size:clamp(11px,1.1vw,13px);margin-top:2px;display:block}
-.brand .tname{font-weight:600;opacity:.9}
-header button.ghost{color:var(--chalk);padding:8px 12px;min-height:38px}
+header.has-steps{padding-bottom:0}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand .logo{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.brand .logo i{width:14px;height:14px;border-radius:50%;background:#D4B977;flex:none;box-shadow:inset -3px -3px 0 rgba(0,0,0,.18)}
+.brand .logotext{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.brand .appname{font-weight:800;font-size:clamp(19px,1.8vw,22px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand .club{font-weight:400;opacity:.72;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand .acts{display:flex;align-items:center;gap:4px;flex:none}
+header button.ghost{color:var(--chalk);padding:8px 12px;min-height:44px}
 header button.ghost:hover{background:rgba(255,255,255,.12)}
-#syncDot{width:9px;height:9px;border-radius:50%;background:#9AA6A0;display:inline-block;flex:none;transition:background .3s var(--ease)}
+#syncDot{width:10px;height:10px;border-radius:50%;background:#B7C1BF;display:inline-block;flex:none;transition:background .3s var(--ease)}
 button.sync{display:inline-flex;align-items:center;gap:7px;font-size:.82em;padding:7px 12px;min-height:36px;opacity:.85}
-button.sync.bad{background:rgba(255,107,90,.18);opacity:1}
+button.sync.bad{background:rgba(178,75,65,.35);opacity:1}
 button.sync.bad #syncDot{animation:idleBlink 1.6s infinite}
 .steps{display:flex;gap:2px;margin-top:12px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .steps::-webkit-scrollbar{display:none}
+.steps:empty{display:none}
 .step{
   flex:1 0 auto;min-width:78px;padding:9px 12px 11px;text-align:center;
-  font-size:.86em;font-weight:400;border:0;border-radius:0;background:none;
-  color:rgba(255,255,255,.6);white-space:nowrap;min-height:0;
+  font-size:.92em;font-weight:500;border:0;border-radius:0;background:none;
+  color:rgba(255,255,255,.66);white-space:nowrap;min-height:0;
   border-bottom:3px solid transparent;margin-bottom:-3px;transition:color .2s var(--ease),border-color .2s var(--ease);
 }
 .step:hover:not(:disabled){color:rgba(255,255,255,.9);background:none;border-color:rgba(255,255,255,.3)}
 .step.done{color:rgba(255,255,255,.85)}
-.step.active{color:#fff;font-weight:500;border-bottom-color:var(--ball)}
+.step.active{color:#fff;font-weight:700;border-bottom-color:#D4B977}
 .step:disabled{opacity:.35;cursor:default}
 main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) calc(96px + env(safe-area-inset-bottom))}
 
@@ -124,9 +123,10 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
 .section-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:22px 0 10px;flex-wrap:wrap}
+.toolbar.static{position:static;background:none;padding-top:0}
 .toolbar{
   position:sticky;bottom:0;z-index:20;
-  background:linear-gradient(to top,var(--paper) 62%,rgba(241,243,238,0));
+  background:linear-gradient(to top,var(--paper) 62%,rgba(244,246,245,0));
   padding:16px 0 calc(8px + env(safe-area-inset-bottom));
   display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;
 }
@@ -136,18 +136,18 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
   border:1px solid var(--edge);border-radius:var(--r-pill);background:#fff;cursor:pointer;user-select:none;
   transition:background .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease),transform .1s var(--ease);
 }
-.chip:hover{border-color:#BFCCC3}
+.chip:hover{border-color:#B7C1BF}
 .chip:active{transform:scale(.97)}
-.chip input{width:auto;margin:0;min-height:0;accent-color:var(--felt)}
-.chip.on{background:var(--felt);color:#fff;border-color:var(--felt)}
+.chip input{width:auto;margin:0;min-height:0;accent-color:var(--act)}
+.chip.on{background:var(--act);color:#fff;border-color:var(--act)}
 .chip.on input{accent-color:#fff}
-.pill{display:inline-block;padding:3px 10px;border-radius:var(--r-pill);font-size:.78em;font-weight:500;background:#E7ECF1;color:var(--ink-2)}
+.pill{display:inline-block;padding:3px 10px;border-radius:var(--r-pill);font-size:.78em;font-weight:500;background:var(--rule);color:var(--ink-2)}
 .pill.seed1{background:var(--ball-soft);color:var(--ball-2)}
-.pill.seed2{background:#DCEAF6;color:var(--felt)}
-.pill.seed3{background:#E4E8F5;color:#3B4C8F}
-.warn-box{background:#FFF8E6;border:1px solid #F0DDA6;border-left:4px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:.9em}
-.err-box{background:#FCF0EE;border:1px solid #EEC2BC;border-left:4px solid var(--bad);border-radius:12px;padding:12px 14px;font-size:.9em}
-.explain{background:#F2F5F8;border:1px solid var(--rule);border-radius:12px;padding:12px 14px;font-size:.9em}
+.pill.seed2{background:#D9E3EC;color:var(--act-2)}
+.pill.seed3{background:#E7F1ED;color:#1F5A4C}
+.warn-box{background:#F7EFDD;border:1px solid #E3CF9E;border-left:4px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:.9em}
+.err-box{background:#F8EAE8;border:1px solid #E5B8B3;border-left:4px solid var(--bad);border-radius:12px;padding:12px 14px;font-size:.9em}
+.explain{background:var(--act-soft);border:1px solid var(--rule);border-radius:12px;padding:12px 14px;font-size:.9em}
 .explain li{margin:4px 0}
 .sep{display:inline-block;width:1px;height:.85em;background:var(--edge);margin:0 8px;vertical-align:-1px}
 
@@ -179,16 +179,16 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
   padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;
   cursor:grab;border:1px dashed transparent;transition:background .15s var(--ease),border-color .15s var(--ease);
 }
-.group li:hover{background:#F2F5F8}
+.group li:hover{background:var(--paper)}
 .group li.selected{border-color:var(--ball);background:var(--ball-soft)}
-.group.drop{outline:3px dashed var(--ball);outline-offset:-4px;background:#FFFBF6}
+.group.drop{outline:3px dashed var(--ball);outline-offset:-4px;background:#FBF7EE}
 
 /* ============ live layout ============ */
 .live-top{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 .stat{display:flex;gap:clamp(14px,2.5vw,28px);flex-wrap:wrap}
-.stat b{font-family:"Heebo",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(20px,2.4vw,27px);display:block;line-height:1.05}
+.stat b{font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(20px,2.4vw,27px);display:block;line-height:1.05}
 .stat span{font-size:.76em;color:var(--ink-3)}
-.progress{height:6px;background:#E1E7E1;border-radius:var(--r-pill);overflow:hidden;margin:6px 0 16px}
+.progress{height:8px;background:var(--edge);border-radius:var(--r-pill);overflow:hidden;margin:6px 0 16px}
 .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--felt-2),var(--felt));transition:width .6s var(--ease)}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--edge);margin-bottom:16px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
@@ -198,7 +198,7 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
   transition:color .18s var(--ease),border-color .18s var(--ease);
 }
 .tab:hover{background:none;color:var(--ink-2);border-color:var(--edge)}
-.tab.active{color:var(--ink);font-weight:600;border-bottom-color:var(--ball)}
+.tab.active{color:var(--ink);font-weight:700;border-bottom-color:var(--act)}
 .live-grid{display:grid;gap:clamp(14px,2vw,22px)}
 .lg-main{min-width:0}
 .lg-side{min-width:0}
@@ -234,7 +234,7 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
 .table.busy{cursor:pointer}
 .table.busy:hover{transform:translateY(-3px);box-shadow:inset 0 0 0 3px rgba(255,255,255,.95),var(--shadow-2)}
 .table.stuck{animation:tableIn .3s var(--ease) both,alertPulse 1.9s 1.2s infinite}
-@keyframes alertPulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,255,255,.9),var(--shadow-1)}50%{box-shadow:inset 0 0 0 3px var(--ball),0 0 0 5px rgba(194,65,12,.28)}}
+@keyframes alertPulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,255,255,.9),var(--shadow-1)}50%{box-shadow:inset 0 0 0 3px var(--ball),0 0 0 5px rgba(154,107,24,.3)}}
 .table .tnum{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:.76em;opacity:.85;font-weight:500}
 .table .tnum .lock{
   font-size:.9em;background:rgba(0,0,0,.28);padding:4px 10px;border-radius:var(--r-pill);
@@ -244,7 +244,7 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
 .table .players{position:relative;z-index:2;font-weight:600;font-size:clamp(15px,1.15vw,17.5px);line-height:1.24;text-align:center;margin:10px 0;text-shadow:0 1px 2px rgba(0,0,0,.22)}
 .table .players .vs{display:block;font-size:.62em;font-weight:400;opacity:.7;margin:3px 0}
 .table .meta{position:relative;z-index:2;font-size:.76em;opacity:.85;display:flex;justify-content:space-between;gap:8px}
-.table .free-lbl{position:relative;z-index:2;text-align:center;font-family:"Heebo",sans-serif;font-weight:700;font-size:clamp(16px,1.3vw,19px);margin:auto;letter-spacing:.02em}
+.table .free-lbl{position:relative;z-index:2;text-align:center;font-family:"Assistant",sans-serif;font-weight:700;font-size:clamp(16px,1.3vw,19px);margin:auto;letter-spacing:.02em}
 .table.drop{outline:3px dashed var(--ball);outline-offset:-3px}
 .table.clearing{animation:clearWipe .42s var(--ease) both}
 @keyframes clearWipe{0%{filter:brightness(1.5)}100%{filter:none}}
@@ -256,7 +256,7 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
   border:1px solid var(--edge);border-radius:12px;border-right:5px solid var(--gc,var(--ink-3));
   cursor:grab;animation:rowIn .24s var(--ease) both;
 }
-.queue li:hover{border-color:#C6D2C9}
+.queue li:hover{border-color:#B7C1BF}
 .queue li .who{flex:1;font-weight:500;min-width:0}
 .queue li .why{font-size:.76em;color:var(--ink-3);font-weight:400;margin-top:3px}
 .queue li .rest{font-size:.78em;color:var(--warn);white-space:nowrap}
@@ -267,10 +267,10 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
   display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none;
   padding:10px 15px;min-height:var(--tap);border:1px solid var(--edge);border-radius:12px;background:#fff;
 }
-.toggle:hover{border-color:#C4D0C8}
-.toggle i{width:40px;height:23px;border-radius:var(--r-pill);background:#CBD5CD;position:relative;transition:background .22s var(--ease);flex:none}
+.toggle:hover{border-color:#B7C1BF}
+.toggle i{width:40px;height:23px;border-radius:var(--r-pill);background:#B7C1BF;position:relative;transition:background .22s var(--ease);flex:none}
 .toggle i::after{content:"";position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:right .22s var(--ease)}
-.toggle.on i{background:var(--felt)}
+.toggle.on i{background:var(--act)}
 .toggle.on i::after{right:20px}
 
 /* ============ scoresheet tables ============ */
@@ -279,22 +279,22 @@ table.st th,table.st td{padding:9px 7px;text-align:center;white-space:nowrap}
 table.st th{font-weight:400;color:var(--ink-3);font-size:.82em;border-bottom:2px solid var(--edge)}
 table.st td{border-bottom:1px solid var(--rule)}
 table.st td.name{text-align:right;font-weight:500;white-space:normal}
-table.st tbody tr:nth-child(even) td,table.st tr:nth-child(even) td{background:#FAFBFC}
-table.st tr.q td{background:#E9F3EC;box-shadow:inset 3px 0 0 var(--ok)}
-table.st tr.c td{background:#FBF6EC;box-shadow:inset 3px 0 0 var(--warn)}
+table.st tbody tr:nth-child(even) td,table.st tr:nth-child(even) td{background:#FAFBFB}
+table.st tr.q td{background:#E7F1ED;box-shadow:inset 3px 0 0 var(--ok)}
+table.st tr.c td{background:#F7EFDD;box-shadow:inset 3px 0 0 var(--warn)}
 table.st tr{transition:transform .5s var(--ease)}
 table.st tr.moved{animation:climb .55s var(--ease) both}
 @keyframes climb{0%{background:var(--ball-soft)}100%{background:transparent}}
 .tb{
   display:inline-flex;align-items:center;justify-content:center;margin-right:6px;
-  width:20px;height:20px;border-radius:50%;background:#E7ECF1;color:var(--ink-2);
+  width:24px;height:24px;border-radius:50%;background:var(--rule);color:var(--ink-2);
   font-size:.72em;border:0;padding:0;min-height:0;box-shadow:none;
 }
 .tb:hover{background:var(--ball);color:#fff}
 .matchlist{list-style:none;margin:10px 0 0;padding:0;font-size:.88em}
 .matchlist li{display:flex;justify-content:space-between;gap:10px;padding:8px 4px;border-bottom:1px solid var(--rule)}
 .matchlist li:last-child{border-bottom:0}
-.matchlist li .sc{font-family:"Heebo",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:1.05em}
+.matchlist li .sc{font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:1.05em}
 .matchlist li .edit{color:var(--ink-3);font-size:.82em;background:none;border:0;padding:2px 6px;min-height:0;box-shadow:none}
 .matchlist li .edit:hover{color:var(--ball);background:none}
 
@@ -305,17 +305,17 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 .bm{background:#fff;border:1px solid var(--edge);border-radius:10px;overflow:hidden;font-size:.88em;box-shadow:var(--shadow-1);transition:border-color .18s var(--ease),box-shadow .18s var(--ease)}
 .bm div{display:flex;justify-content:space-between;gap:8px;padding:9px 12px}
 .bm div+div{border-top:1px solid var(--rule)}
-.bm .w{font-weight:600;color:var(--felt);background:#E8F1FA}
+.bm .w{font-weight:700;color:var(--act-2);background:var(--act-soft)}
 .bm .bye{color:var(--ink-3);font-style:italic}
-.bm .sc{font-family:"Heebo",sans-serif;font-weight:800;font-variant-numeric:tabular-nums}
-.bm.live{border-color:var(--ball);box-shadow:0 0 0 3px rgba(194,65,12,.18)}
+.bm .sc{font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums}
+.bm.live{border-color:var(--ball);box-shadow:0 0 0 3px rgba(154,107,24,.2)}
 
 /* ============ podium ============ */
 .podium{display:flex;align-items:flex-end;justify-content:center;gap:clamp(6px,1.4vw,14px);margin:26px 0 30px;min-height:230px}
 .pod{flex:1;max-width:230px;text-align:center}
 .pod .name{font-weight:600;font-size:clamp(15px,1.5vw,20px);margin-bottom:10px;min-height:52px;display:flex;align-items:flex-end;justify-content:center}
 .pod .block{
-  font-family:"Heebo",sans-serif;font-weight:900;background:var(--felt);color:#fff;border-radius:10px 10px 0 0;
+  font-family:"Assistant",sans-serif;font-weight:800;background:var(--felt);color:#fff;border-radius:10px 10px 0 0;
   font-size:clamp(30px,4vw,46px);display:flex;align-items:center;justify-content:center;
   box-shadow:inset 0 -7px 0 rgba(0,0,0,.16);transform-origin:bottom;animation:rise .55s var(--ease) both;
 }
@@ -326,7 +326,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 
 /* ============ modal ============ */
 .modal-bg{
-  position:fixed;inset:0;background:rgba(17,24,39,.55);backdrop-filter:blur(3px);
+  position:fixed;inset:0;background:rgba(27,36,43,.5);backdrop-filter:blur(3px);
   display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:0;
   animation:fadeIn .18s var(--ease) both;
 }
@@ -346,19 +346,19 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 .names{display:grid;grid-template-columns:1fr 40px 1fr;gap:10px;text-align:center;font-weight:600;font-size:clamp(15px,1.3vw,18px);align-items:start}
 .names>div:first-child{border-bottom:4px solid var(--rubber);padding-bottom:8px}
 .names>div:last-child{border-bottom:4px solid var(--pip);padding-bottom:8px}
-.names .setsw{display:block;font-family:"Heebo",sans-serif;font-weight:900;font-variant-numeric:tabular-nums;font-size:clamp(30px,4vw,40px);color:var(--felt);line-height:1.1;margin-top:4px}
+.names .setsw{display:block;font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(30px,4vw,40px);color:var(--act);line-height:1.1;margin-top:4px}
 .sets{display:grid;gap:9px;margin:16px 0}
 .set{display:grid;grid-template-columns:1fr 40px 1fr;gap:10px;align-items:center}
 .set input{
-  text-align:center;font-family:"Heebo",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(24px,3.4vw,30px);
+  text-align:center;font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(24px,3.4vw,30px);
   padding:12px 4px;border-width:2px;border-radius:12px;min-height:56px;
 }
-.set input:focus{border-color:var(--felt);box-shadow:0 0 0 4px rgba(15,76,129,.12)}
-.set input:disabled{background:#F3F6F3;color:var(--ink-3);border-color:var(--rule)}
-.set input.bad{border-color:var(--bad);background:#FDF4F3}
+.set input:focus{border-color:var(--act);box-shadow:0 0 0 4px rgba(59,90,127,.14)}
+.set input:disabled{background:var(--paper);color:var(--ink-3);border-color:var(--rule)}
+.set input.bad{border-color:var(--bad);background:#F8EAE8}
 .set .x{text-align:center;color:var(--ink-3);font-size:.85em}
 .quick{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0}
-.quick button{font-size:.84em;padding:8px 13px;min-height:38px}
+.quick button{font-size:.9em;padding:8px 13px;min-height:44px}
 
 /* ============ toast ============ */
 .toast{
@@ -368,8 +368,8 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
   max-width:min(92vw,520px);animation:toastUp .3s var(--ease) both;
 }
 @keyframes toastUp{from{transform:translate(-50%,18px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
-.toast button{background:var(--ball);color:#fff;border:0;padding:7px 14px;min-height:36px;font-weight:600}
-.toast button:hover{background:var(--ball-2)}
+.toast button{background:#fff;color:var(--ink);border:0;padding:8px 16px;min-height:44px;font-weight:700}
+.toast button:hover{background:var(--act-soft)}
 
 /* ============ login / list ============ */
 .login{max-width:400px;margin:clamp(24px,7vh,64px) auto}
@@ -380,8 +380,15 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
   box-shadow:var(--shadow-1);animation:rowIn .28s var(--ease) both;
   transition:border-color .18s var(--ease),transform .18s var(--ease),box-shadow .18s var(--ease);
 }
-.tlist li:hover{border-color:var(--felt);transform:translateY(-2px);box-shadow:var(--shadow-2)}
-.tlist .tn{font-weight:600;font-size:1.08em}
+.tlist li:hover{border-color:var(--act);transform:translateY(-2px);box-shadow:var(--shadow-2)}
+.tlist .tn{font-weight:700;font-size:1.1em}
+.tlist .chev{color:var(--ink-3);font-size:1.4em;line-height:1}
+.hero{background:var(--act-soft);border-radius:22px;padding:22px 20px;margin-bottom:18px}
+.hero .lbl{color:var(--ink-2);font-size:.95em}
+.hero h2{font-size:clamp(24px,2.4vw,30px);font-weight:800;margin:8px 0 6px}
+.hero .meta{color:var(--ink-2);margin-bottom:18px}
+.hero button{width:100%}
+.list-h{font-size:1em;font-weight:600;color:var(--ink-2);margin:4px 0 10px}
 .tlist .tm{font-size:.84em;color:var(--ink-3);margin-top:3px}
 
 /* ============ hall display ============ */
@@ -395,7 +402,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 .public .table{min-height:clamp(150px,20vh,200px)}
 .public .table .players{font-size:clamp(19px,2.4vw,30px)}
 .public .next{margin-top:26px}
-.public .next h2{font-size:clamp(20px,2.4vw,30px);margin-bottom:10px;color:var(--ball)}
+.public .next h2{font-size:clamp(20px,2.4vw,30px);margin-bottom:10px;color:#D4B977}
 .public .next ul{padding:0;margin:0}
 .public .next li{
   font-size:clamp(17px,2vw,26px);padding:11px 2px;border-bottom:1px solid rgba(255,255,255,.14);
@@ -407,7 +414,6 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 
 /* ============ responsive ============ */
 @media (max-width:600px){
-  .brand .tname{width:100%;margin-top:2px}
   .toolbar button{flex:1 1 auto}
   .toolbar button.big{flex-basis:100%}
   .stat{gap:16px}
@@ -443,11 +449,11 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 <body>
 <header>
   <div class="brand">
-    <div class="logo"><i></i><div class="logotext"><span class="club">מועדון טניס שולחן מבואות החרמון <b class="dedic">ע"ש רוני גלבוע</b></span><span class="tagline">תן לי שולחן<span class="tname" id="hdrName"></span></span></div></div>
-    <div class="row" style="gap:6px">
+    <div class="logo"><i></i><div class="logotext"><span class="appname">תן לי שולחן</span><span class="club" id="hdrName">מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע</span></div></div>
+    <div class="acts">
       <button id="syncBtn" class="ghost sync" onclick="diagnostics()" title="מצב השמירה"><span id="syncDot"></span><span id="syncTxt"></span></button>
-      <button class="ghost" style="color:#fff" id="btnList" onclick="closeTournament()">כל התחרויות</button>
-      <button class="ghost" style="color:#fff" id="btnOut" onclick="FB.signOut()">יציאה</button>
+      <button class="ghost" id="btnList" onclick="closeTournament()">כל התחרויות</button>
+      <button class="ghost" id="btnOut" onclick="FB.signOut()">יציאה</button>
     </div>
   </div>
   <nav class="steps" id="steps"></nav>
@@ -460,7 +466,8 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 <script>
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
-const GROUP_COLORS=['#1F6F4A','#2F6DB5','#B5512F','#7B4FB5','#B58A2F','#2FA3A8','#B52F7A','#5B7B2F','#2F4FB5','#8A6A4F'];
+const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
+const GROUP_COLORS=['#2E7D6B','#3B5A7F','#B24B41','#6B5B95','#9A6B18','#2F7F86','#9A4F76','#5B7340','#4E6E95','#7A6450'];
 const DEF={
   phase:'setup',
   settings:{name:'',date:new Date().toISOString().slice(0,10),system:'groups-ko',format:'singles',boGroup:5,boKO:5,tables:4,groupSize:4,advance:2,consolation:true,third:false,restMin:5,model:'group',auto:true,stuckMult:1.5,swissRounds:5,swissKO:false,swissAdvance:4,rounds:6,target:21,kingTarget:11},
@@ -520,17 +527,17 @@ function renderSteps(){
   const reach={setup:true,players:true,draw:S.groups.length>0,live:S.matches.length>0,ko:S.koBuilt,final:canFinish()};
   const lbl=Object.assign({},STEP_NAMES,{live:SYSTEMS[sys()].live});
   document.getElementById('steps').innerHTML=steps().map((k,i)=>`<button class="step ${i<cur?'done':''} ${i===cur?'active':''}" ${reach[k]?'':'disabled'} onclick="goto('${k}')">${lbl[k]}</button>`).join('');
-  document.getElementById('hdrName').textContent=S.settings.name?'· '+S.settings.name:'';
+  document.getElementById('hdrName').textContent=S.settings.name||CLUB_NAME;
 }
 
 /* ========================= RENDER ========================= */
 function render(){
   const app=document.getElementById('app');
-  document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER?'':'none';
+  document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID));
   if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
   if(!USER){document.getElementById('steps').innerHTML='';return renderLogin(app)}
   if(!PROFILE){document.getElementById('steps').innerHTML='';app.innerHTML='<div class="card login"><h2>אין הרשאה</h2><p class="muted">המשתמש הזה לא מוגדר במערכת הנוכחות של המועדון. בקשו משלום להוסיף אותו.</p><button onclick="FB.signOut()">יציאה</button></div>';return}
-  if(!TID){document.getElementById('steps').innerHTML='';document.getElementById('hdrName').textContent='';return renderList(app)}
+  if(!TID){document.getElementById('steps').innerHTML='';document.getElementById('hdrName').textContent=CLUB_NAME;return renderList(app)}
   renderSteps();
   ({setup:renderSetup,players:renderPlayers,draw:renderDraw,live:renderLive,ko:renderLive,final:renderFinal})[S.phase](app);
 }
@@ -597,7 +604,7 @@ function renderSetup(app){
       <div class="hint" id="modelHint">${{group:'לכל בית שולחן קבוע. אם יש יותר שולחנות מבתים — בתים גדולים מקבלים שניים.',pool:'כל שולחן שמתפנה מושך את המשחק הדחוף ביותר: סיבוב נמוך, בית מפגר, מי שמחכה הכי הרבה.',hybrid:'נועלים שולחן לבית מתוך כרטיס השולחן. שולחנות לא נעולים משרתים את כולם.'}[s.model]}</div>
     </div>`:''}
   </div>
-  <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמירה והמשך לשחקנים</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button></div>`;
+  <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמירה והמשך לשחקנים</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button>${PROFILE&&PROFILE.role==='Admin'?'<button class="ghost danger" onclick="deleteTournament()">מחיקת התחרות</button>':''}</div>`;
 }
 function setFmt(v){S.settings.format=v;commit()}
 function setSystem(v){const wasTeam=isTeamSys();S.settings.system=v;if(v!=='groups-ko')S.settings.model='pool';if(isTeamSys()||wasTeam)S.settings.format='singles';commit()}
@@ -681,7 +688,7 @@ function renderPlayers(app){
     </details>
   </div>`}
   <div class="section-h"><h2>רשומים (${cnt})</h2>${cnt&&!locked?'<button class="ghost danger" onclick="if(confirm(\'למחוק את כל השחקנים?\')){S.players=[];S.groups=[];commit()}">מחק הכול</button>':''}</div>
-  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${p.seed}">מדורג ${p.seed}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${p.id}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="S.players=S.players.filter(x=>x.id!=='${p.id}');S.groups.forEach(g=>g.pids=g.pids.filter(x=>x!=='${p.id}'));commit()">✕</button>`}</li>`).join('')}</ul>
+  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${p.seed}">מדורג ${p.seed}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${p.id}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="removePlayer('${p.id}')" title="הסרה">✕</button>`}</li>`).join('')}</ul>
   <div class="toolbar">
     <button class="ghost" onclick="goto('setup')">חזרה להגדרות</button>
     ${locked?`<button class="primary big" onclick="goto('live')">למסך המשחקים</button>`:
@@ -704,6 +711,11 @@ function bulkAdd(){
     let seed=0,club='';for(const x of parts.slice(1)){if(/^[123]$/.test(x))seed=+x;else if(x)club=x}
     S.players.push({id:uid(),name,club,seed});c++}
   toast(`נוספו ${c} שחקנים`);commit();
+}
+function removePlayer(id){
+  const p=P(id);if(!p)return;const players=S.players.slice(),groups=S.groups.map(g=>({...g,pids:g.pids.slice()}));
+  S.players=S.players.filter(x=>x.id!==id);S.groups.forEach(g=>g.pids=g.pids.filter(x=>x!==id));commit();
+  toast(`${p.name} הוסר/ה`,{label:'ביטול',fn:()=>{S.players=players;S.groups=groups;commit();hideToast()}});
 }
 function cycleSeed(id){const p=P(id);p.seed=(p.seed+1)%4;commit()}
 
@@ -972,7 +984,7 @@ function renderLive(app){
     ${[['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt).map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
   </div>
   <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'?tab:'tables']()}</div>
-  <div class="toolbar">
+  <div class="toolbar LIVEBAR">
     ${!koPhase&&sy==='groups-ko'&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו, בונים את עץ הנוקאאוט</button>`:''}
     ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בניית נוקאאוט ל-${S.settings.swissAdvance} המובילים</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`):''}
     ${!koPhase&&isTeamSys()&&amRoundsDone()>=S.settings.rounds&&ms.every(m=>m.status==='done')?`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`:''}
@@ -984,6 +996,7 @@ function renderLive(app){
     <button onclick="openPublic()">📺 מסך לאולם</button>
     <button onclick="shareSummary()">📤 שתף סיכום</button>
   </div>`;
+  const bar=app.querySelector('.LIVEBAR');bar.classList.remove('LIVEBAR');if(!bar.querySelector('.primary'))bar.classList.add('static');
   clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){if(S.tab==='tables')document.getElementById('tabBody').innerHTML=tablesTab()}else clearInterval(ticker)},30000);
 }
 function estimateFinish(){
@@ -1584,7 +1597,7 @@ function renderFinal(app){
   <div class="toolbar"><button class="primary big" onclick="shareSummary()">📤 שתף לוואטסאפ</button><button onclick="exportCSV()">⬇ ייצוא CSV</button><button onclick="window.print()">🖨 הדפסה</button><button onclick="exportJSON()">⬇ גיבוי JSON</button><button class="ghost" onclick="goto('live')">חזרה למשחקים</button></div>`;
   burst();
 }
-function burst(){if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const c=document.createElement('canvas');c.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:99';c.width=innerWidth;c.height=innerHeight;document.body.appendChild(c);const x=c.getContext('2d');const ps=Array.from({length:120},()=>({x:innerWidth/2,y:innerHeight*0.35,vx:(Math.random()-.5)*14,vy:-Math.random()*14-4,c:['#F28C28','#1F6F4A','#fff','#2F6DB5'][Math.floor(Math.random()*4)],s:6+Math.random()*6}));let t=0;(function f(){x.clearRect(0,0,c.width,c.height);ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.35;x.fillStyle=p.c;x.fillRect(p.x,p.y,p.s,p.s)});if(++t<90)requestAnimationFrame(f);else c.remove()})()}
+function burst(){if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const c=document.createElement('canvas');c.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:99';c.width=innerWidth;c.height=innerHeight;document.body.appendChild(c);const x=c.getContext('2d');const ps=Array.from({length:120},()=>({x:innerWidth/2,y:innerHeight*0.35,vx:(Math.random()-.5)*14,vy:-Math.random()*14-4,c:['#D4B977','#2E7D6B','#fff','#3B5A7F'][Math.floor(Math.random()*4)],s:6+Math.random()*6}));let t=0;(function f(){x.clearRect(0,0,c.width,c.height);ps.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.35;x.fillStyle=p.c;x.fillRect(p.x,p.y,p.s,p.s)});if(++t<90)requestAnimationFrame(f);else c.remove()})()}
 function shareSummary(){
   const r=finalRanking();const sy=sys();
   const lines=[`🏓 ${S.settings.name||'תחרות'} · ${S.settings.date}`,`שיטה: ${SYSTEMS[sy].n}`,''];
@@ -1640,13 +1653,26 @@ function renderLogin(app){
   <button class="primary big" onclick="doLogin()">כניסה</button></div>`;
 }
 async function doLogin(){const e=document.getElementById('lg_e').value.trim(),p=document.getElementById('lg_p').value;const err=document.getElementById('lg_err');err.style.display='none';try{await FB.signIn(e,p)}catch(x){err.style.display='block';err.textContent='הכניסה נכשלה — בדקו אימייל וסיסמה.'}}
+const PHASE_NAMES={setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'המשחקים רצים',ko:'נוקאאוט',final:'הסתיימה'};
+function fmtDate(d){if(!d)return '';const x=new Date(d+'T12:00');if(isNaN(x))return d;const o={weekday:'long',day:'numeric',month:'long'};if(x.getFullYear()!==new Date().getFullYear())o.year='numeric';return x.toLocaleDateString('he-IL',o)}
+function tMeta(t){return [fmtDate(t.date),`${t.playersCount||0} שחקנים`,PHASE_NAMES[t.phase]||''].filter(Boolean).join(' · ')}
+// התחרות שמוצגת בגדול: זו שרצה עכשיו, אחרת הקרובה שעוד לא הסתיימה
+function heroTournament(){
+  const open=LIST.filter(t=>t.phase!=='final');
+  const running=open.find(t=>t.phase==='live'||t.phase==='ko');if(running)return running;
+  const today=new Date().toISOString().slice(0,10);
+  const up=open.filter(t=>(t.date||'')>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  return up[0]||open[0]||null;
+}
 function renderList(app){
-  app.innerHTML=`<div class="live-top"><div><h1>התחרויות שלנו</h1><div class="tiny">${esc(PROFILE.name||'')}</div></div><button class="primary big" onclick="newTournament()">+ תחרות חדשה</button></div>
+  const hero=heroTournament();const rest=LIST.filter(t=>t!==hero);
+  const running=hero&&(hero.phase==='live'||hero.phase==='ko');
+  app.innerHTML=`<h1 style="margin-bottom:16px">התחרויות שלנו</h1>
   ${syncErr?`<div class="err-box" style="margin-bottom:14px"><b>אין גישה לענן.</b> תחרויות שנוצרו במכשיר הזה עדיין עובדות ונשמרות מקומית, אבל לא נראות במכשירים אחרים. <button style="margin-top:8px" onclick="diagnostics()">בדיקה ותיקון</button></div>`:''}
-  ${LIST.length?`<ul class="tlist">${LIST.map(t=>`<li onclick="openTournament('${t.id}')"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${t.date||''} · ${t.playersCount||0} שחקנים · ${({setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'שלב הבתים',ko:'נוקאאוט',final:'הסתיימה'})[t.phase]||''}</div></div>
-    <div class="row" style="gap:4px">${PROFILE.role==='Admin'?`<button class="ghost danger" onclick="event.stopPropagation();deleteTournament('${t.id}','${esc(t.name||'')}')">✕</button>`:''}<span style="color:var(--ink-3)">‹</span></div></li>`).join('')}</ul>`:
-  `<div class="card muted">עדיין אין תחרויות. לחצו "תחרות חדשה" — לוקח דקה.</div>`}
-  <p class="tiny" style="margin-top:20px">שחקנים אפשר לייבא ישירות מאפליקציית הנוכחות מתוך מסך "שחקנים".</p>`;
+  ${hero?`<div class="hero"><div class="lbl">${running?'התחרות שרצה עכשיו':'התחרות הקרובה'}</div><h2>${esc(hero.name||'ללא שם')}</h2><div class="meta">${esc(tMeta(hero))}</div><button class="primary big" onclick="openTournament('${hero.id}')">כניסה לתחרות</button></div>`:''}
+  ${rest.length?`${hero?'<div class="list-h">תחרויות נוספות</div>':''}<ul class="tlist">${rest.map(t=>`<li onclick="openTournament('${t.id}')"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${esc(tMeta(t))}</div></div><span class="chev">‹</span></li>`).join('')}</ul>`:''}
+  ${LIST.length?'':`<div class="card muted" style="margin-bottom:14px">עדיין אין תחרויות. תחרות חדשה לוקחת דקה.</div>`}
+  <button class="${LIST.length?'outline':'primary'} big" style="width:100%;margin-top:18px" onclick="newTournament()">+ תחרות חדשה</button>`;
 }
 async function newTournament(){
   const id=uid()+uid();S=fresh();S.rev=0;TID=id;logEv('נפתחה תחרות חדשה','create');
@@ -1732,7 +1758,7 @@ async function diagnostics(){
   <div class="row" style="margin-top:16px"><button class="primary" onclick="closeModal();pushCloud().then(ok=>toast(ok?'נשמר בענן':'עדיין לא נשמר'))">נסה לשמור עכשיו</button>
   <button onclick="exportJSON()">הורדת גיבוי</button><button class="ghost" onclick="closeModal()">סגור</button></div>`);
 }
-async function deleteTournament(id,name){if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));localStorage.removeItem(KEY+'.'+id)}catch(e){toast('המחיקה נכשלה')}}
+async function deleteTournament(){const id=TID,name=S.settings.name||'ללא שם';if(!id)return;if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;clearTimeout(cloudT);cloudT=null;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));localStorage.removeItem(KEY+'.'+id);closeTournament(true);render();toast('התחרות נמחקה')}catch(e){toast('המחיקה נכשלה');scheduleCloud()}}
 /* import players from attendance app */
 async function importFromClub(){
   modal('<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">טוען…</p>');
