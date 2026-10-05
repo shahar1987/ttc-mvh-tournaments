@@ -1706,29 +1706,45 @@ function onCloudConflict(tid,d,pushed){
   toast('עודכן ממכשיר אחר — הזן שוב',offer);
 }
 function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
-async function pushCloud(force){
-  if(!TID||!USER)return false;cloudT=null;clearTimeout(retryT);
-  if(!navigator.onLine){setSync('offline');scheduleRetry();return false}
+/* שמירות לענן רצות אחת אחרי השנייה (לא במקביל): שמירה איטית שנשלחה קודם לא יכולה לנחות אחרי שמירה חדשה יותר
+   של אותו מכשיר ולהחזיר את הענן אחורה. התוכן נלכד ברגע הקריאה; שמירה שממתינה בתור מתעדכנת לתוכן האחרון. */
+let pushChain=Promise.resolve();const pushQ=new Map();
+function pushCloud(force){
+  if(!TID||!USER)return Promise.resolve(false);cloudT=null;clearTimeout(retryT);
+  if(!navigator.onLine){setSync('offline');scheduleRetry();return Promise.resolve(false)}
   setSync('saving');
   const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
-  const tid=TID,rev=body.rev,base=CLOUD_REV,ref=FB.doc(FB.db,'tournaments',tid);
+  const tid=TID;const queued=pushQ.get(tid);
+  if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;return queued.p}
+  const job={tid,body};pushQ.set(tid,job);
+  job.p=pushChain.then(()=>{pushQ.delete(tid);return pushOnce(job)});
+  pushChain=job.p.catch(()=>false);
+  return job.p;
+}
+function baseFor(tid){if(tid===TID)return CLOUD_REV;try{const b=localStorage.getItem(KEY+'.'+tid+'.base');if(b!==null&&b!==''&&!isNaN(+b))return +b}catch(e){}return null}
+async function pushOnce(job){
+  const {tid,body}=job;const rev=body.rev,base=baseFor(tid),ref=FB.doc(FB.db,'tournaments',tid);
   try{
+    let res=null;
     if(!FB.runTransaction){await FB.setDoc(ref,body,{merge:true})}
     else{
-      const conflict=await FB.runTransaction(FB.db,async tx=>{
+      res=await FB.runTransaction(FB.db,async tx=>{
         const snap=await tx.get(ref);
         if(snap.exists()){const d=snap.data();const rr=d.rev||0;
+          // הגרסה בענן היא של המכשיר הזה וחדשה יותר ממה שבידינו — לא כותבים (זה היה מחזיר את הענן אחורה), ואין התנגשות.
+          if(d.client===CLIENT&&rr>rev)return {stale:rr};
           // מותר לכתוב: אין עדיין מצב בענן, או שהגרסה בענן היא שלנו, או שלא נוספה גרסה אחרי זו שאנחנו מכירים.
           // כשלא ידוע על איזו גרסה התבססנו (נפתח מהמטמון לפני הסנכרון הראשון) — ההתנהגות הקודמת: רק אם המקומי חדש יותר.
           const ok=!d.state||d.client===CLIENT||(base!=null?rr<=base:rr<rev);
-          if(!ok)return d;}
+          if(!ok)return {conflict:d};}
         tx.set(ref,body,{merge:true});return null;
       });
-      if(conflict){retryN=0;syncErr=null;onCloudConflict(tid,conflict,body.state);return false}
+      if(res&&res.conflict){retryN=0;syncErr=null;onCloudConflict(tid,res.conflict,body.state);return false}
     }
-    setBase(tid,rev);
-    retryN=0;syncErr=null;setSync('saved');return true;
+    const b=res&&res.stale!=null?res.stale:rev;const cur=baseFor(tid);
+    if(cur==null||b>cur)setBase(tid,b);
+    retryN=0;syncErr=null;if(!pushQ.size&&!cloudT)setSync('saved');return true;
   }catch(e){
     console.error('pushCloud',e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('לא נשמר בענן. הנתונים בטוחים במכשיר.',{label:'בדיקה',fn:diagnostics})}
