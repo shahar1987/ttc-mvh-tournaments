@@ -467,7 +467,9 @@ const DEF={
   players:[],groups:[],matches:[],tables:[],lots:{},log:[],lastPlayed:{},tab:'tables',avgDur:{}, koBuilt:false, lastUndo:null, kingQueue:[], kingHolders:{}, byes:[]
 };
 let S=fresh();
-function fresh(){return JSON.parse(JSON.stringify(DEF))}
+function fresh(){const o=JSON.parse(JSON.stringify(DEF));o.settings.date=todayIL();return o}
+// התאריך של היום לפי שעון ישראל (YYYY-MM-DD), מחושב מחדש בכל תחרות חדשה ולא פעם אחת בטעינה ב-UTC.
+function todayIL(){try{const p={};new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).forEach(x=>p[x.type]=x.value);if(p.year&&p.month&&p.day)return p.year+'-'+p.month+'-'+p.day}catch(e){}return new Date().toISOString().slice(0,10)}
 function save(){if(!TID)return;S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}scheduleCloud()}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function logEv(t,kind){
@@ -496,6 +498,9 @@ function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('he-IL',{h
 function mins(ms){return Math.round(ms/60000)}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+// ערך שנכנס למחרוזת JS בתוך onclick='...': הדפדפן מפענח &#39; בחזרה לגרש לפני שה-JS רץ, לכן esc לבד לא מספיק.
+// כל תו שאינו אות/ספרה לטינית הופך ל-\uXXXX, כך שאי אפשר לצאת מהמחרוזת. למזהים רגילים (uid) הפלט זהה לקלט.
+function ja(s){return esc(`${s}`.replace(/[^A-Za-z0-9_\-]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0')))}
 function commit(){save();render();queueMicrotask(markMoves)}
 let _ranks={};
 function markMoves(){
@@ -545,7 +550,7 @@ function renderSetup(app){
     ${locked?'<div class="warn-box">התחרות כבר התחילה — אפשר לשנות רק שולחנות, מודל פיזור ומנוחה.</div>':''}
     <div class="grid2">
       <div><label>שם התחרות</label><input id="s_name" value="${esc(s.name)}" placeholder="למשל: גביע הקיבוץ 2026" ${locked?'disabled':''}></div>
-      <div><label>תאריך</label><input id="s_date" type="date" value="${s.date}" ${locked?'disabled':''}></div>
+      <div><label>תאריך</label><input id="s_date" type="date" value="${esc(s.date)}" ${locked?'disabled':''}></div>
     </div>
     <div><label>שיטת התחרות</label>
       <div class="radio-group">
@@ -573,22 +578,22 @@ function renderSetup(app){
       <label class="chip ${s.third?'on':''}"><input type="checkbox" ${s.third?'checked':''} ${locked?'disabled':''} onchange="S.settings.third=this.checked;commit()">משחק על מקום 3</label>
     </div>`:''}
     ${s.system==='swiss'?`<div class="grid2">
-      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${s.swissRounds}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
+      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
       <div><label>מערכות בכל משחק</label><select id="s_bog" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boGroup==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div>
     </div>
     <div class="row"><label class="chip ${s.swissKO?'on':''}"><input type="checkbox" ${s.swissKO?'checked':''} ${locked?'disabled':''} onchange="S.settings.swissKO=this.checked;commit()">נוקאאוט למובילים בסוף</label>
       ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
     ${isTeamSys()?`<div class="grid2">
-      <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${s.rounds}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
+      <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${esc(s.rounds)}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
       <div><label>משחק עד כמה נקודות</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
     </div>`:''}
     ${s.system==='king'?`<div class="grid2">
       <div><label>משחק עד כמה נקודות</label><select id="s_king" ${locked?'disabled':''}>${[5,7,11,15,21].map(n=>`<option value="${n}" ${s.kingTarget==n?'selected':''}>${n} נקודות</option>`).join('')}</select></div>
-      <div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest2" type="number" min="0" max="30" value="${s.restMin}"></div>
-    </div><div class="hint">המנצח נשאר על השולחן. המפסיד עובר לסוף התור.${S.players.length&&S.players.length<=s.tables*2?` שימו לב: עם ${S.players.length} שחקנים ו-${s.tables} שולחנות אותם זוגות עלולים לחזור על עצמם — כדאי פחות שולחנות.`:''}</div>`:''}
+      <div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest2" type="number" min="0" max="30" value="${esc(s.restMin)}"></div>
+    </div><div class="hint">המנצח נשאר על השולחן. המפסיד עובר לסוף התור.${S.players.length&&S.players.length<=s.tables*2?` שימו לב: עם ${S.players.length} שחקנים ו-${esc(s.tables)} שולחנות אותם זוגות עלולים לחזור על עצמם — כדאי פחות שולחנות.`:''}</div>`:''}
     <div class="grid2">
-      <div><label>שולחנות פעילים באולם</label><input id="s_tables" type="number" min="1" max="40" value="${s.tables}"></div>
-      ${s.system==='king'?'<div></div>':`<div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest" type="number" min="0" max="30" value="${s.restMin}"></div>`}
+      <div><label>שולחנות פעילים באולם</label><input id="s_tables" type="number" min="1" max="40" value="${esc(s.tables)}"></div>
+      ${s.system==='king'?'<div></div>':`<div><label>מנוחה בין משחקים (דקות)</label><input id="s_rest" type="number" min="0" max="30" value="${esc(s.restMin)}"></div>`}
     </div>
     ${sys()==='groups-ko'?`<div><label>איך מפזרים משחקים לשולחנות?</label>
       <div class="radio-group">
@@ -681,7 +686,7 @@ function renderPlayers(app){
     </details>
   </div>`}
   <div class="section-h"><h2>רשומים (${cnt})</h2>${cnt&&!locked?'<button class="ghost danger" onclick="if(confirm(\'למחוק את כל השחקנים?\')){S.players=[];S.groups=[];commit()}">מחק הכול</button>':''}</div>
-  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${p.seed}">מדורג ${p.seed}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${p.id}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="S.players=S.players.filter(x=>x.id!=='${p.id}');S.groups.forEach(g=>g.pids=g.pids.filter(x=>x!=='${p.id}'));commit()">✕</button>`}</li>`).join('')}</ul>
+  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${esc(p.seed)}">מדורג ${esc(p.seed)}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${ja(p.id)}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="S.players=S.players.filter(x=>x.id!=='${ja(p.id)}');S.groups.forEach(g=>g.pids=g.pids.filter(x=>x!=='${ja(p.id)}'));commit()">✕</button>`}</li>`).join('')}</ul>
   <div class="toolbar">
     <button class="ghost" onclick="goto('setup')">חזרה להגדרות</button>
     ${locked?`<button class="primary big" onclick="goto('live')">למסך המשחקים</button>`:
@@ -741,7 +746,7 @@ function planCard(n){
   if(sys()==='swiss'){
     const r=S.settings.swissRounds||suggestSwissRounds(n);
     return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
-    <div class="hint">${r} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
+    <div class="hint">${esc(r)} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
   }
   if(isTeamSys()||sys()==='king')return '';
   const opts=bestPlan(n).slice(0,4);const cur=S.settings.groupSize;
@@ -788,7 +793,7 @@ function renderDraw(app){
   app.innerHTML=`
   <h1>ההגרלה</h1>
   <p class="muted">${S.groups.length} בתים · ${S.players.length} שחקנים · שיטת נחש ל-ITTF. אפשר לגרור שחקן לבית אחר (או ללחוץ עליו ואז על הבית).</p>
-  ${w.length?`<div class="warn-box">שחקנים מאותו מועדון באותו בית: ${w.join(' · ')}. אפשר לגרור כדי להפריד.</div>`:''}
+  ${w.length?`<div class="warn-box">שחקנים מאותו מועדון באותו בית: ${esc(w.join(' · '))}. אפשר לגרור כדי להפריד.</div>`:''}
   ${bad?'<div class="err-box">יש בית עם פחות מ-3 או יותר מ-6 שחקנים. תקנו לפני האישור.</div>':''}
   <div class="row" style="margin:12px 0">
     <button onclick="reshuffle()">🔀 ערבב שוב (המדורגים נשארים)</button>
@@ -796,9 +801,9 @@ function renderDraw(app){
     <button onclick="removeEmptyGroup()">− בית ריק</button>
   </div>
   <div class="groups">${S.groups.map(g=>`
-    <div class="group" style="--gc:${gcolor(g.id)}" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="dropTo(event,'${g.id}')" onclick="if(selPid)moveTo(selPid,'${g.id}')">
-      <header class="gh"><h3><i class="gdot"></i>${g.name}</h3><span class="tiny">${g.pids.length} שחקנים · ${g.pids.length*(g.pids.length-1)/2} משחקים</span></header>
-      <ul>${g.pids.map(id=>{const p=P(id);return `<li draggable="true" class="${selPid===id?'selected':''}" ondragstart="event.dataTransfer.setData('t','${id}')" onclick="event.stopPropagation();selPid=selPid==='${id}'?null:'${id}';render()"><span>${esc(p.name)} <span class="tiny">${esc(p.club||'')}</span></span>${p.seed?`<span class="pill seed${p.seed}">${p.seed}</span>`:''}</li>`}).join('')}</ul>
+    <div class="group" style="--gc:${gcolor(g.id)}" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="dropTo(event,'${ja(g.id)}')" onclick="if(selPid)moveTo(selPid,'${ja(g.id)}')">
+      <header class="gh"><h3><i class="gdot"></i>${esc(g.name)}</h3><span class="tiny">${g.pids.length} שחקנים · ${g.pids.length*(g.pids.length-1)/2} משחקים</span></header>
+      <ul>${g.pids.map(id=>{const p=P(id);return `<li draggable="true" class="${selPid===id?'selected':''}" ondragstart="event.dataTransfer.setData('t','${ja(id)}')" onclick="event.stopPropagation();selPid=selPid==='${ja(id)}'?null:'${ja(id)}';render()"><span>${esc(p.name)} <span class="tiny">${esc(p.club||'')}</span></span>${p.seed?`<span class="pill seed${esc(p.seed)}">${esc(p.seed)}</span>`:''}</li>`}).join('')}</ul>
     </div>`).join('')}</div>
   <div class="toolbar">
     <button class="ghost" onclick="goto('players')">חזרה לשחקנים</button>
@@ -962,7 +967,7 @@ function renderLive(app){
   const standFn=sy==='groups-ko'?groupsTab:sy==='swiss'?swissTab:isTeamSys()?amTab:kingTab;
   app.innerHTML=`
   <div class="live-top">
-    <div><h1>${title}</h1><div class="tiny">${esc(S.settings.name)} · ${S.settings.date} · ${SYSTEMS[sy].n}</div></div>
+    <div><h1>${title}</h1><div class="tiny">${esc(S.settings.name)} · ${esc(S.settings.date)} · ${SYSTEMS[sy].n}</div></div>
     <div class="stat"><div><b>${done}${sy==='king'?'':'/'+total}</b><span>משחקים</span></div><div><b>${S.tables.filter(t=>t.matchId).length}/${S.tables.length}</b><span>שולחנות פעילים</span></div><div><b>${est||'—'}</b><span>סיום צפוי</span></div></div>
   </div>
   ${sy==='king'?'':`<div class="progress"><i style="width:${total?Math.min(100,done/total*100):0}%"></i></div>`}
@@ -974,7 +979,7 @@ function renderLive(app){
   <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'?tab:'tables']()}</div>
   <div class="toolbar">
     ${!koPhase&&sy==='groups-ko'&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו, בונים את עץ הנוקאאוט</button>`:''}
-    ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בניית נוקאאוט ל-${S.settings.swissAdvance} המובילים</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`):''}
+    ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בניית נוקאאוט ל-${esc(S.settings.swissAdvance)} המובילים</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`):''}
     ${!koPhase&&isTeamSys()&&amRoundsDone()>=S.settings.rounds&&ms.every(m=>m.status==='done')?`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`:''}
     ${!koPhase&&isTeamSys()&&ms.every(m=>m.status==='done')&&amRoundsDone()<S.settings.rounds?`<button class="primary" onclick="americanoRound(amRoundsDone()+1);commit();autoDistribute()">+ צור סיבוב ${amRoundsDone()+1}</button>`:''}
     ${sy==='king'?`<button class="primary big" onclick="endKing()">🏆 סיום ולפודיום</button>`:''}
@@ -1026,9 +1031,9 @@ function playerCard(pid){
   else if(isTeamSys()){const st=amStandings();const me=st.find(x=>x.id===pid);pos=`מקום ${st.indexOf(me)+1} · ${me?me.pts:0} נקודות`}
   else pos=`${(S.kingCrowns||{})[pid]||0} ניצחונות`;
   return `<div class="card" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><h3>${esc(pname(pid))}</h3><span class="pill">${esc(pos)}</span></div>
-  <div style="margin-top:8px">${now?`<b style="color:var(--table)">משחק/ת עכשיו — שולחן ${now.table}</b> מול ${esc(sideName(now,sideIds(now,1).includes(pid)?2:1))}`:
-    nextQ?`הבא בתור: מול ${esc(sideName(nextQ.m,sideIds(nextQ.m,1).includes(pid)?2:1))} <span class="tiny">(${matchLabel(nextQ.m)})</span>`:'<span class="muted">אין משחק ממתין כרגע</span>'}</div>
-  ${dn.length?`<ul class="matchlist">${dn.slice(-6).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span class="sc">${m.score?m.score.join(':'):setsWon(m).join(':')}</span></li>`).join('')}</ul>`:''}</div>`;
+  <div style="margin-top:8px">${now?`<b style="color:var(--table)">משחק/ת עכשיו — שולחן ${esc(now.table)}</b> מול ${esc(sideName(now,sideIds(now,1).includes(pid)?2:1))}`:
+    nextQ?`הבא בתור: מול ${esc(sideName(nextQ.m,sideIds(nextQ.m,1).includes(pid)?2:1))} <span class="tiny">(${esc(matchLabel(nextQ.m))})</span>`:'<span class="muted">אין משחק ממתין כרגע</span>'}</div>
+  ${dn.length?`<ul class="matchlist">${dn.slice(-6).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span class="sc">${esc(m.score?m.score.join(':'):setsWon(m).join(':'))}</span></li>`).join('')}</ul>`:''}</div>`;
 }
 function quickAdd(){
   modal(`<h2>הוספת שחקן</h2><p class="muted">${sys()==='king'?'ייכנס לסוף התור.':'ישתתף מהסיבוב הבא.'}</p><label>שם</label><input id="qa_n"><div class="row" style="margin-top:14px"><button class="primary" onclick="doQuickAdd()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
@@ -1056,19 +1061,19 @@ function tablesTab(){
   <div class="live-grid"><div class="lg-main">
   <div class="tables">${S.tables.map(t=>{
     const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
-    if(!m)return `<div class="table free" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="this.classList.remove('drop');dropMatch(event,${t.n})">
-      <div class="tnum"><span>שולחן ${t.n}</span>${groupPhase&&S.settings.model!=='pool'?`<button class="lock" onclick="lockTable(${t.n})">${t.lock?esc(G(t.lock)?.name||''):'🔓 פתוח לכולם'}</button>`:''}</div>
+    if(!m)return `<div class="table free" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="this.classList.remove('drop');dropMatch(event,${Number(t.n)})">
+      <div class="tnum"><span>שולחן ${esc(t.n)}</span>${groupPhase&&S.settings.model!=='pool'?`<button class="lock" onclick="lockTable(${Number(t.n)})">${t.lock?esc(G(t.lock)?.name||''):'🔓 פתוח לכולם'}</button>`:''}</div>
       <div class="free-lbl">פנוי</div><div class="meta"><span>${t.lock&&groupPhase?'ממתין למשחק מ'+esc(G(t.lock)?.name||''):'גררו משחק לכאן'}</span></div></div>`;
     const dur=now-m.startedAt;const stuck=dur>avg*S.settings.stuckMult;
-    return `<div class="table busy ${stuck?'stuck':''}" onclick="openResult('${m.id}')">
-      <div class="tnum"><span>שולחן ${t.n}</span><span>${matchLabel(m)}</span></div>
+    return `<div class="table busy ${stuck?'stuck':''}" onclick="openResult('${ja(m.id)}')">
+      <div class="tnum"><span>שולחן ${esc(t.n)}</span><span>${esc(matchLabel(m))}</span></div>
       <div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div>
       <div class="meta"><span>${mins(dur)} דק׳${stuck?' · אולי שכחו לדווח?':''}</span><span>הזינו תוצאה</span></div></div>`}).join('')}</div>
   </div><aside class="lg-side">
   <div class="section-h"><h2>בתור (${q.length})</h2><span class="tiny">גררו לשולחן פנוי</span></div>
   ${q.length?`<ul class="queue">${q.slice(0,40).map(x=>{const m=x.m;const i1=mins(now-idleSince(sideIds(m,1)[0])),i2=mins(now-idleSince(sideIds(m,2)[0]));const cls=v=>v>=30?'idle-bad':v>=20?'idle-warn':'';
-    return `<li style="--gc:${m.stage==='group'?gcolor(m.groupId):'var(--ball)'}" draggable="${x.busy?'false':'true'}" ondragstart="event.dataTransfer.setData('m','${m.id}')" ${x.busy?'style="opacity:.5"':''}>
-      <div class="who"><span class="${cls(i1)}">${esc(sideName(m,1))}</span> – <span class="${cls(i2)}">${esc(sideName(m,2))}</span><div class="why">${matchLabel(m)} · ${x.why.filter(w=>w!=='במנוחה').join(' · ')}${x.busy?' · אחד מהם משחק עכשיו':''}</div></div>
+    return `<li style="--gc:${m.stage==='group'?gcolor(m.groupId):'var(--ball)'}" draggable="${x.busy?'false':'true'}" ondragstart="event.dataTransfer.setData('m','${ja(m.id)}')" ${x.busy?'style="opacity:.5"':''}>
+      <div class="who"><span class="${cls(i1)}">${esc(sideName(m,1))}</span> – <span class="${cls(i2)}">${esc(sideName(m,2))}</span><div class="why">${esc(matchLabel(m))} · ${esc(x.why.filter(w=>w!=='במנוחה').join(' · '))}${x.busy?' · אחד מהם משחק עכשיו':''}</div></div>
       ${x.rest?'<span class="rest">במנוחה</span>':''}</li>`}).join('')}${q.length>40?`<li class="tiny">ועוד ${q.length-40} משחקים</li>`:''}</ul>`:`<div class="card muted">אין משחקים ממתינים${S.tables.some(t=>t.matchId)?'. מחכים שהשולחנות יתפנו.':'.'}</div>`}
   </aside></div>`;
 }
@@ -1083,7 +1088,7 @@ function dropMatch(ev,tn){ev.preventDefault();const id=ev.dataTransfer.getData('
 function lockTable(tn){
   const t=S.tables.find(x=>x.n===tn);
   const opts=[{v:'',l:'🔓 פתוח לכולם'},...S.groups.map(g=>({v:g.id,l:'נעול ל'+g.name}))];
-  modal(`<h2>שולחן ${tn}</h2><p class="muted">שולחן נעול מקבל רק משחקים מהבית שלו.</p><div class="radio-group">${opts.map(o=>`<label class="chip ${(t.lock||'')===o.v?'on':''}"><input type="radio" name="lk" value="${o.v}" ${(t.lock||'')===o.v?'checked':''}>${o.l}</label>`).join('')}</div>
+  modal(`<h2>שולחן ${tn}</h2><p class="muted">שולחן נעול מקבל רק משחקים מהבית שלו.</p><div class="radio-group">${opts.map(o=>`<label class="chip ${(t.lock||'')===o.v?'on':''}"><input type="radio" name="lk" value="${esc(o.v)}" ${(t.lock||'')===o.v?'checked':''}>${esc(o.l)}</label>`).join('')}</div>
   <div class="row" style="margin-top:16px"><button class="primary" onclick="S.tables.find(x=>x.n===${tn}).lock=document.querySelector('input[name=lk]:checked').value||null;if(S.settings.model==='group')S.settings.model='hybrid';closeModal();commit();autoDistribute()">שמור</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
 }
 
@@ -1093,20 +1098,20 @@ function openResult(mid){
   if(isPointGame(m))return openPointResult(m);
   const need=needSets(m);const bo=need*2-1;
   const cur=m.sets.slice();while(cur.length<bo)cur.push([null,null]);
-  modal(`<h2>${matchLabel(m)}${m.table?' · שולחן '+m.table:''}</h2>
+  modal(`<h2>${esc(matchLabel(m))}${m.table?' · שולחן '+esc(m.table):''}</h2>
   <div class="names"><div>${esc(sideName(m,1))}<span class="setsw" id="swA">0</span></div><div></div><div>${esc(sideName(m,2))}<span class="setsw" id="swB">0</span></div></div>
-  <div class="quick"><span class="tiny">מהיר:</span><button onclick="quickFill('${mid}',0)">${esc(sideName(m,1))} ${need}:0</button><button onclick="quickFill('${mid}',1)">${esc(sideName(m,2))} ${need}:0</button></div>
-  <div class="sets" id="sets">${cur.map((s,i)=>`<div class="set"><input type="number" inputmode="numeric" min="0" id="a${i}" value="${s[0]??''}" data-i="${i}" data-side="0" placeholder="–"><span class="x">${i+1}</span><input type="number" inputmode="numeric" min="0" id="b${i}" value="${s[1]??''}" data-i="${i}" data-side="1" placeholder="–"></div>`).join('')}</div>
+  <div class="quick"><span class="tiny">מהיר:</span><button onclick="quickFill('${ja(mid)}',0)">${esc(sideName(m,1))} ${need}:0</button><button onclick="quickFill('${ja(mid)}',1)">${esc(sideName(m,2))} ${need}:0</button></div>
+  <div class="sets" id="sets">${cur.map((s,i)=>`<div class="set"><input type="number" inputmode="numeric" min="0" id="a${i}" value="${esc(s[0])}" data-i="${i}" data-side="0" placeholder="–"><span class="x">${i+1}</span><input type="number" inputmode="numeric" min="0" id="b${i}" value="${esc(s[1])}" data-i="${i}" data-side="1" placeholder="–"></div>`).join('')}</div>
   <div class="hint">מקלידים צד אחד — הצד השני מתמלא לבד. 10 → 12, 11+ → הפרש 2.</div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
-  <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="saveResult('${mid}')">שמור ופנה שולחן</button>
+  <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="saveResult('${ja(mid)}')">שמור ופנה שולחן</button>
     <button class="ghost" onclick="closeModal()">סגור</button></div>
   <details style="margin-top:14px"><summary class="tiny" style="cursor:pointer">מצבים מיוחדים</summary>
     <div class="row" style="margin-top:8px">
-      <button class="danger" onclick="walkover('${mid}','${m.p2}')">${esc(sideName(m,2))} לא הגיע/ה</button>
-      <button class="danger" onclick="walkover('${mid}','${m.p1}')">${esc(sideName(m,1))} לא הגיע/ה</button>
-      ${m.status==='playing'?`<button class="danger" onclick="retire('${mid}','${m.p2}')">${esc(pname(m.p2))} פרש/ה</button><button class="danger" onclick="retire('${mid}','${m.p1}')">${esc(pname(m.p1))} פרש/ה</button>`:''}
-      ${m.status==='playing'?`<button onclick="backToQueue('${mid}')">החזר לתור (הוזן בטעות)</button>`:''}
+      <button class="danger" onclick="walkover('${ja(mid)}','${ja(m.p2)}')">${esc(sideName(m,2))} לא הגיע/ה</button>
+      <button class="danger" onclick="walkover('${ja(mid)}','${ja(m.p1)}')">${esc(sideName(m,1))} לא הגיע/ה</button>
+      ${m.status==='playing'?`<button class="danger" onclick="retire('${ja(mid)}','${ja(m.p2)}')">${esc(pname(m.p2))} פרש/ה</button><button class="danger" onclick="retire('${ja(mid)}','${ja(m.p1)}')">${esc(pname(m.p1))} פרש/ה</button>`:''}
+      ${m.status==='playing'?`<button onclick="backToQueue('${ja(mid)}')">החזר לתור (הוזן בטעות)</button>`:''}
     </div></details>`);
   const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
@@ -1184,14 +1189,14 @@ function undoLast(){
 function openPointResult(m){
   const tg=m.target||(m.stage==='king'?S.settings.kingTarget:S.settings.target);
   const sc=m.score||[null,null];
-  modal(`<h2>${matchLabel(m)}${m.table?' · שולחן '+m.table:''}</h2>
+  modal(`<h2>${esc(matchLabel(m))}${m.table?' · שולחן '+esc(m.table):''}</h2>
   <div class="names"><div>${esc(sideName(m,1))}</div><div></div><div>${esc(sideName(m,2))}</div></div>
-  <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" max="${tg}" id="pa" value="${sc[0]??''}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" max="${tg}" id="pb" value="${sc[1]??''}" placeholder="–"></div></div>
-  <div class="hint">משחק עד ${tg}. מקלידים צד אחד — השני מתמלא להשלמה.</div>
-  <div class="quick"><span class="tiny">מהיר:</span><button onclick="document.getElementById('pa').value=${tg};document.getElementById('pb').value=0;pRefresh('${m.id}')">${esc(sideName(m,1))} ${tg}:0</button><button onclick="document.getElementById('pb').value=${tg};document.getElementById('pa').value=0;pRefresh('${m.id}')">${esc(sideName(m,2))} ${tg}:0</button></div>
+  <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pa" value="${esc(sc[0])}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pb" value="${esc(sc[1])}" placeholder="–"></div></div>
+  <div class="hint">משחק עד ${esc(tg)}. מקלידים צד אחד — השני מתמלא להשלמה.</div>
+  <div class="quick"><span class="tiny">מהיר:</span><button onclick="document.getElementById('pa').value=${Number(tg)};document.getElementById('pb').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,1))} ${esc(tg)}:0</button><button onclick="document.getElementById('pb').value=${Number(tg)};document.getElementById('pa').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,2))} ${esc(tg)}:0</button></div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
-  <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="savePoint('${m.id}')">שמור ופנה שולחן</button><button class="ghost" onclick="closeModal()">סגור</button>
-  ${m.status==='playing'?`<button onclick="backToQueue('${m.id}')">החזר לתור</button>`:''}</div>`);
+  <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="savePoint('${ja(m.id)}')">שמור ופנה שולחן</button><button class="ghost" onclick="closeModal()">סגור</button>
+  ${m.status==='playing'?`<button onclick="backToQueue('${ja(m.id)}')">החזר לתור</button>`:''}</div>`);
   ['pa','pb'].forEach(id=>{const el=document.getElementById(id);
     el.addEventListener('input',()=>{const other=document.getElementById(id==='pa'?'pb':'pa');const v=el.value===''?null:+el.value;
       if(m.stage!=='king'&&v!==null&&v>=0&&v<=tg)other.value=Math.max(0,tg-v);
@@ -1238,12 +1243,12 @@ function finishPoint(m,score,side){
 function groupsTab(){
   return `<div class="groups" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">${S.groups.map(g=>{
     const r=rankGroup(g.id);const done=groupDone(g.id);const ms=S.matches.filter(m=>m.stage==='group'&&m.groupId===g.id);
-    return `<div class="group" style="--gc:${gcolor(g.id)}"><header class="gh"><h3><i class="gdot"></i>${g.name}</h3><span class="tiny">${ms.filter(m=>m.status==='done').length}/${ms.length} משחקים${done?' · הסתיים':''}</span></header>
+    return `<div class="group" style="--gc:${gcolor(g.id)}"><header class="gh"><h3><i class="gdot"></i>${esc(g.name)}</h3><span class="tiny">${ms.filter(m=>m.status==='done').length}/${ms.length} משחקים${done?' · הסתיים':''}</span></header>
     <div style="padding:6px 8px;overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>מש׳</th><th>נצ׳</th><th>הפ׳</th><th>נק׳</th><th>מערכות</th><th>נקודות</th></tr>
-    ${r.order.map((id,i)=>{const s=r.stats[id];const ex=r.explain[id];const cls=i<S.settings.advance?'q':(S.settings.consolation?'c':'');return `<tr data-pid="${id}" class="${done?cls:''}"><td>${i+1}</td><td class="name">${esc(pname(id))}${ex.length?`<button class="tb" title="איך נקבע המיקום" onclick="showExplain('${g.id}','${id}')">?</button>`:''}</td><td>${s.played}</td><td>${s.w}</td><td>${s.l}</td><td><b>${s.mp}</b></td><td>${s.sw}:${s.sl}</td><td>${s.pw}:${s.pl}</td></tr>`}).join('')}</table>
-    <ul class="matchlist">${ms.map(m=>`<li><span>${esc(pname(m.p1))} – ${esc(pname(m.p2))} <span class="tiny">ס׳${m.round}</span></span><span>${m.status==='done'?`<span class="sc">${setsWon(m).join(':')}</span>${m.wo?' <span class="tiny">טכני</span>':''} <button class="edit" onclick="openResult('${m.id}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${m.table}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul></div></div>`}).join('')}</div>`;
+    ${r.order.map((id,i)=>{const s=r.stats[id];const ex=r.explain[id];const cls=i<S.settings.advance?'q':(S.settings.consolation?'c':'');return `<tr data-pid="${esc(id)}" class="${done?cls:''}"><td>${i+1}</td><td class="name">${esc(pname(id))}${ex.length?`<button class="tb" title="איך נקבע המיקום" onclick="showExplain('${ja(g.id)}','${ja(id)}')">?</button>`:''}</td><td>${s.played}</td><td>${s.w}</td><td>${s.l}</td><td><b>${s.mp}</b></td><td>${s.sw}:${s.sl}</td><td>${esc(s.pw)}:${esc(s.pl)}</td></tr>`}).join('')}</table>
+    <ul class="matchlist">${ms.map(m=>`<li><span>${esc(pname(m.p1))} – ${esc(pname(m.p2))} <span class="tiny">ס׳${esc(m.round)}</span></span><span>${m.status==='done'?`<span class="sc">${setsWon(m).join(':')}</span>${m.wo?' <span class="tiny">טכני</span>':''} <button class="edit" onclick="openResult('${ja(m.id)}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${esc(m.table)}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul></div></div>`}).join('')}</div>`;
 }
-function showExplain(gid,pid){const r=rankGroup(gid);const i=r.order.indexOf(pid);modal(`<h2>${esc(pname(pid))} — מקום ${i+1} ב${G(gid).name}</h2><p class="muted">לפי תקנון ITTF 3.7.5: נקודות משחק, ואז רק המשחקים בין השווים — נקודות משחק, יחס מערכות, יחס נקודות.</p><div class="explain"><ul style="margin:0;padding-right:18px">${r.explain[pid].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div class="row" style="margin-top:14px"><button onclick="closeModal()">סגור</button></div>`)}
+function showExplain(gid,pid){const r=rankGroup(gid);const i=r.order.indexOf(pid);modal(`<h2>${esc(pname(pid))} — מקום ${i+1} ב${esc(G(gid).name)}</h2><p class="muted">לפי תקנון ITTF 3.7.5: נקודות משחק, ואז רק המשחקים בין השווים — נקודות משחק, יחס מערכות, יחס נקודות.</p><div class="explain"><ul style="margin:0;padding-right:18px">${r.explain[pid].map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div class="row" style="margin-top:14px"><button onclick="closeModal()">סגור</button></div>`)}
 
 /* ---------- Late entry ---------- */
 function lateEntry(){
@@ -1263,9 +1268,9 @@ function lateEntry(){
   modal(`<h2>שחקן מאוחר</h2><p class="muted">השחקן ישחק נגד כל חברי הבית. משחקים שכבר שוחקו לא משתנים.</p>
   <label>שם</label><input id="le_name"><label>מועדון (לא חובה)</label><input id="le_club">
   <label>לאיזה בית?</label>
-  <div class="radio-group">${options.map((o,i)=>`<label class="chip ${i===0?'on':''}"><input type="radio" name="leg" value="${o.g.id}" ${i===0?'checked':''} onchange="[...document.querySelectorAll('input[name=leg]')].forEach(x=>x.closest('.chip').classList.toggle('on',x.checked))">${o.g.name} (${o.g.pids.length})</label>`).join('')}
+  <div class="radio-group">${options.map((o,i)=>`<label class="chip ${i===0?'on':''}"><input type="radio" name="leg" value="${esc(o.g.id)}" ${i===0?'checked':''} onchange="[...document.querySelectorAll('input[name=leg]')].forEach(x=>x.closest('.chip').classList.toggle('on',x.checked))">${esc(o.g.name)} (${o.g.pids.length})</label>`).join('')}
     <label class="chip"><input type="radio" name="leg" value="__new" onchange="[...document.querySelectorAll('input[name=leg]')].forEach(x=>x.closest('.chip').classList.toggle('on',x.checked))">בית חדש</label></div>
-  <div class="explain" style="margin-top:10px">${options.map(o=>`<div><b>${o.g.name}:</b> +${o.newMatches} משחקים, כ-${o.estMin} דק׳ נוספות${o.warn.length?` · <span style="color:var(--warn)">${o.warn.join(' · ')}</span>`:' · מומלץ'}</div>`).join('')||'כל הבתים הסתיימו — אפשר רק בית חדש (שחקן אחד לבדו לא יכול לשחק; הוסיפו לפחות 3).'}</div>
+  <div class="explain" style="margin-top:10px">${options.map(o=>`<div><b>${esc(o.g.name)}:</b> +${o.newMatches} משחקים, כ-${o.estMin} דק׳ נוספות${o.warn.length?` · <span style="color:var(--warn)">${o.warn.join(' · ')}</span>`:' · מומלץ'}</div>`).join('')||'כל הבתים הסתיימו — אפשר רק בית חדש (שחקן אחד לבדו לא יכול לשחק; הוסיפו לפחות 3).'}</div>
   <div class="row" style="margin-top:16px"><button class="primary" onclick="doLateEntry()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
 }
 function doLateEntry(){
@@ -1333,12 +1338,12 @@ function swissPair(pool,played,depth){
 function fallbackPair(pool){const out=[];for(let i=0;i<pool.length-1;i+=2)out.push([pool[i],pool[i+1]]);return out}
 function swissTab(){
   const st=swissStandings();const r=swissRoundsDone();const ms=S.matches.filter(m=>m.stage==='swiss');
-  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה</h2><span class="tiny">סיבוב ${r} מתוך ${S.settings.swissRounds}</span></div>
+  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה</h2><span class="tiny">סיבוב ${r} מתוך ${esc(S.settings.swissRounds)}</span></div>
   <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>מש׳</th><th>נצ׳</th><th>הפ׳</th><th>נק׳</th><th>בוכהולץ</th><th>מערכות</th><th>נקודות</th></tr>
-  ${st.map((x,i)=>`<tr data-pid="${x.id}" class="${S.settings.swissKO&&i<S.settings.swissAdvance?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.played}</td><td>${x.w}</td><td>${x.l}</td><td><b>${x.mp}</b></td><td>${x.buch}</td><td>${x.sw}:${x.sl}</td><td>${x.pw}:${x.pl}</td></tr>`).join('')}</table></div>
+  ${st.map((x,i)=>`<tr data-pid="${esc(x.id)}" class="${S.settings.swissKO&&i<S.settings.swissAdvance?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.played}</td><td>${x.w}</td><td>${x.l}</td><td><b>${x.mp}</b></td><td>${x.buch}</td><td>${x.sw}:${x.sl}</td><td>${esc(x.pw)}:${esc(x.pl)}</td></tr>`).join('')}</table></div>
   <p class="tiny" style="margin-top:8px">בוכהולץ = סכום נקודות המשחק של כל היריבים שלך — שובר השוויון המקובל בשיטה השוויצרית.</p></div>
   <div class="card" style="margin-top:12px"><h2>משחקים</h2>
-  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(pname(m.p1))} ${m.bye?'':'– '+esc(pname(m.p2))}</span><span>${m.bye?'<span class="tiny">בוחן — ניצחון אוטומטי</span>':m.status==='done'?`<span class="sc">${setsWon(m).join(':')}</span> <button class="edit" onclick="openResult('${m.id}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${m.table}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
+  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(pname(m.p1))} ${m.bye?'':'– '+esc(pname(m.p2))}</span><span>${m.bye?'<span class="tiny">בוחן — ניצחון אוטומטי</span>':m.status==='done'?`<span class="sc">${setsWon(m).join(':')}</span> <button class="edit" onclick="openResult('${ja(m.id)}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${esc(m.table)}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
 }
 
 /* ========================= AMERICANO / MEXICANO ========================= */
@@ -1396,12 +1401,12 @@ function americanoRound(r){
 function amRoundsDone(){const ms=S.matches.filter(m=>m.stage==='round');return ms.length?Math.max(...ms.map(m=>m.round)):0}
 function amTab(){
   const st=amStandings();const r=amRoundsDone();const ms=S.matches.filter(m=>m.stage==='round');
-  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה אישית</h2><span class="tiny">סיבוב ${r} מתוך ${S.settings.rounds}</span></div>
+  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה אישית</h2><span class="tiny">סיבוב ${r} מתוך ${esc(S.settings.rounds)}</span></div>
   <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>משחקים</th><th>נצ׳</th><th>נקודות</th><th>נגד</th><th>הפרש</th></tr>
-  ${st.map((x,i)=>`<tr data-pid="${x.id}" class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.g}</td><td>${x.w}</td><td><b>${x.pts}</b></td><td>${x.against}</td><td>${x.pts-x.against>0?'+':''}${x.pts-x.against}</td></tr>`).join('')}</table></div>
+  ${st.map((x,i)=>`<tr data-pid="${esc(x.id)}" class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.g}</td><td>${x.w}</td><td><b>${esc(x.pts)}</b></td><td>${esc(x.against)}</td><td>${x.pts-x.against>0?'+':''}${x.pts-x.against}</td></tr>`).join('')}</table></div>
   <p class="tiny" style="margin-top:8px">הנקודות אישיות — מה שצברת נשאר שלך, לא משנה עם מי שיחקת.</p></div>
   <div class="card" style="margin-top:12px"><h2>סיבובים</h2>
-  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span>${m.status==='done'?`<span class="sc">${(m.score||[]).join(':')}</span> <button class="edit" onclick="openResult('${m.id}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${m.table}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
+  ${Array.from({length:r},(_,i)=>i+1).reverse().map(rd=>`<h3 style="margin-top:10px">סיבוב ${rd}</h3><ul class="matchlist">${ms.filter(m=>m.round===rd).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span>${m.status==='done'?`<span class="sc">${esc((m.score||[]).join(':'))}</span> <button class="edit" onclick="openResult('${ja(m.id)}')">ערוך</button>`:m.status==='playing'?`<span class="tiny">שולחן ${esc(m.table)}</span>`:'<span class="tiny">ממתין</span>'}</span></li>`).join('')}</ul>`).join('')}</div>`;
 }
 
 /* ========================= KING OF THE TABLE ========================= */
@@ -1435,9 +1440,9 @@ function kingTab(){
   const done=S.matches.filter(m=>m.stage==='king'&&m.status==='done');
   return `<div class="card"><h2>מלכים</h2>
   <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>ניצחונות</th><th>משחקים</th><th>אחוז</th></tr>
-  ${st.map((x,i)=>`<tr data-pid="${x.id}" class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}${Object.values(S.kingHolders||{}).includes(x.id)?' 👑':''}</td><td><b>${x.w}</b></td><td>${x.g}</td><td>${x.g?Math.round(x.w/x.g*100):0}%</td></tr>`).join('')}</table></div></div>
+  ${st.map((x,i)=>`<tr data-pid="${esc(x.id)}" class="${i<3?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}${Object.values(S.kingHolders||{}).includes(x.id)?' 👑':''}</td><td><b>${esc(x.w)}</b></td><td>${x.g}</td><td>${x.g?Math.round(x.w/x.g*100):0}%</td></tr>`).join('')}</table></div></div>
   <div class="card" style="margin-top:12px"><h2>התור (${(S.kingQueue||[]).length})</h2><div class="row" style="gap:6px;margin-top:6px">${(S.kingQueue||[]).map((id,i)=>`<span class="pill">${i+1}. ${esc(pname(id))}</span>`).join('')||'<span class="muted">ריק</span>'}</div></div>
-  <div class="card" style="margin-top:12px"><h2>משחקים אחרונים</h2><ul class="matchlist">${done.slice().reverse().slice(0,25).map(m=>`<li><span>${esc(sideName(m,m.winSide||1))} <span class="tiny">ניצח/ה את</span> ${esc(sideName(m,m.winSide===1?2:1))}</span><span class="sc">${(m.score||[]).join(':')}</span></li>`).join('')||'<li class="muted">עדיין אין</li>'}</ul></div>`;
+  <div class="card" style="margin-top:12px"><h2>משחקים אחרונים</h2><ul class="matchlist">${done.slice().reverse().slice(0,25).map(m=>`<li><span>${esc(sideName(m,m.winSide||1))} <span class="tiny">ניצח/ה את</span> ${esc(sideName(m,m.winSide===1?2:1))}</span><span class="sc">${esc((m.score||[]).join(':'))}</span></li>`).join('')||'<li class="muted">עדיין אין</li>'}</ul></div>`;
 }
 function endKing(){if(!confirm('לסיים את מלך השולחן ולעבור לפודיום?'))return;S.matches.filter(m=>m.stage==='king'&&m.status==='playing').forEach(m=>{const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)]});S.matches=S.matches.filter(m=>!(m.stage==='king'&&m.status!=='done'));goto('final')}
 
@@ -1528,7 +1533,7 @@ function bracketTab(){
     return `<h2 style="margin:6px 0 8px">${title}</h2><div class="bracket">${Array.from({length:rounds},(_,r)=>`<div class="round"><h4>${koRoundName({bracket,koRound:r})}</h4>${ms.filter(m=>m.koRound===r&&!m.third).sort((a,b)=>a.koIndex-b.koIndex).map(m=>bm(m)).join('')}</div>`).join('')}
     ${S.settings.third&&bracket==='main'?`<div class="round"><h4>מקום 3</h4>${ms.filter(m=>m.third).map(bm).join('')}</div>`:''}</div>`};
   const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
-    return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${m.status}'!=='pending')openResult('${m.id}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
+    return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
   return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'עץ ניחומים'):'');
 }
 function logTab(){
@@ -1643,26 +1648,37 @@ async function doLogin(){const e=document.getElementById('lg_e').value.trim(),p=
 function renderList(app){
   app.innerHTML=`<div class="live-top"><div><h1>התחרויות שלנו</h1><div class="tiny">${esc(PROFILE.name||'')}</div></div><button class="primary big" onclick="newTournament()">+ תחרות חדשה</button></div>
   ${syncErr?`<div class="err-box" style="margin-bottom:14px"><b>אין גישה לענן.</b> תחרויות שנוצרו במכשיר הזה עדיין עובדות ונשמרות מקומית, אבל לא נראות במכשירים אחרים. <button style="margin-top:8px" onclick="diagnostics()">בדיקה ותיקון</button></div>`:''}
-  ${LIST.length?`<ul class="tlist">${LIST.map(t=>`<li onclick="openTournament('${t.id}')"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${t.date||''} · ${t.playersCount||0} שחקנים · ${({setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'שלב הבתים',ko:'נוקאאוט',final:'הסתיימה'})[t.phase]||''}</div></div>
-    <div class="row" style="gap:4px">${PROFILE.role==='Admin'?`<button class="ghost danger" onclick="event.stopPropagation();deleteTournament('${t.id}','${esc(t.name||'')}')">✕</button>`:''}<span style="color:var(--ink-3)">‹</span></div></li>`).join('')}</ul>`:
+  ${LIST.length?`<ul class="tlist">${LIST.map(t=>`<li data-tid="${esc(t.id)}"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${esc(t.date||'')} · ${esc(t.playersCount||0)} שחקנים · ${esc(PHASE_LBL[t.phase]||'')}</div></div>
+    <div class="row" style="gap:4px">${canDelete()?`<button class="ghost danger" data-del="${esc(t.id)}">✕</button>`:''}<span style="color:var(--ink-3)">‹</span></div></li>`).join('')}</ul>`:
   `<div class="card muted">עדיין אין תחרויות. לחצו "תחרות חדשה" — לוקח דקה.</div>`}
   <p class="tiny" style="margin-top:20px">שחקנים אפשר לייבא ישירות מאפליקציית הנוכחות מתוך מסך "שחקנים".</p>`;
+  // בלי onclick עם מזהה בתוך המחרוזת: המזהה נקרא מ-data-* (dataset), כך ששם או מזהה זדוני לא יכול להריץ קוד.
+  const ul=app.querySelector('ul.tlist');
+  if(ul)ul.addEventListener('click',e=>{
+    const del=e.target.closest('[data-del]');
+    if(del){e.stopPropagation();const t=LIST.find(x=>x.id===del.dataset.del);deleteTournament(del.dataset.del,t?(t.name||''):'');return}
+    const li=e.target.closest('li[data-tid]');if(li)openTournament(li.dataset.tid);
+  });
 }
+const PHASE_LBL=Object.assign(Object.create(null),{setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'שלב הבתים',ko:'נוקאאוט',final:'הסתיימה'});
+// מחיקה מותרת בכללי Firestore ל-hasPerm('competitions'): מנהל, או מי שיש לו הרשאת "תחרויות".
+function canDelete(){if(!PROFILE)return false;const perms=Array.isArray(PROFILE.permissions)?PROFILE.permissions:[];return String(PROFILE.role||'').toLowerCase()==='admin'||perms.includes('competitions')}
 async function newTournament(){
-  const id=uid()+uid();S=fresh();S.rev=0;TID=id;logEv('נפתחה תחרות חדשה','create');
+  const id=uid()+uid();S=fresh();S.rev=0;TID=id;CLOUD_REV=null;logEv('נפתחה תחרות חדשה','create');
   const ok=await pushCloud(true);
   openTournament(id);
   if(!ok)setTimeout(diagnostics,400);
 }
 async function openTournament(id){
   TID=id;const cached=localStorage.getItem(KEY+'.'+id);if(cached){try{S=Object.assign(fresh(),JSON.parse(cached))}catch(e){}}
+  CLOUD_REV=null;try{const b=localStorage.getItem(KEY+'.'+id+'.base');if(b!==null&&b!==''&&!isNaN(+b))CLOUD_REV=+b}catch(e){}
   const ref=FB.doc(FB.db,'tournaments',id);
   if(unsubT)unsubT();
   unsubT=FB.onSnapshot(ref,snap=>{
     if(!snap.exists()){closeTournament();toast('התחרות נמחקה');return}
     const d=snap.data();if(!d.state)return;
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
-    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=Math.max(S.rev||0,d.rev||0);localStorage.setItem(KEY+'.'+id,d.state);closeModal();render()}catch(e){console.error(e)}}
+    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=Math.max(S.rev||0,d.rev||0);setBase(id,d.rev||0);localStorage.setItem(KEY+'.'+id,d.state);closeModal();render()}catch(e){console.error(e)}}
     else if((d.rev||0)<(S.rev||0)){scheduleCloud()}
     setSync('saved');
   },e=>{console.error(e);syncErr=e;setSync('error');
@@ -1671,6 +1687,24 @@ async function openTournament(id){
 }
 function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent)render()}
 let syncState='idle',syncErr=null,retryN=0,retryT=null,warnedOnce=false;
+/* מניעת "עדכון אבוד": CLOUD_REV הוא ה-rev של הגרסה בענן שהמצב המקומי כבר כולל (קיבלנו אותה או כתבנו אותה).
+   השמירה נעשית בטרנזקציה: אם בענן יש בינתיים גרסה של מכשיר אחר שלא ראינו — לא דורסים אותה.
+   במקום זה מקבלים את גרסת הענן, שומרים את הגרסה המקומית כגיבוי (localStorage + כפתור הורדה) ומבקשים להזין שוב.
+   מיזוג אוטומטי ברמת משחק לא נעשה בכוונה: משחק אחד משפיע על שולחנות, תור, עץ נוקאאוט וסיבובים הבאים,
+   ומיזוג חלקי עלול לייצר מצב שבור. */
+let CLOUD_REV=null;
+function setBase(id,rev){if(id===TID)CLOUD_REV=rev;try{localStorage.setItem(KEY+'.'+id+'.base',String(rev))}catch(e){}}
+function onCloudConflict(tid,d,pushed){
+  // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
+  const open=TID===tid;const mine=open?JSON.stringify(S):pushed;let nm='tournament';try{nm=JSON.parse(mine).settings.name||nm}catch(e){}
+  try{localStorage.setItem(KEY+'.'+tid+'.conflict',mine)}catch(e){}
+  const offer={label:'גיבוי שלי',fn:()=>dl(new Blob([mine],{type:'application/json'}),nm+'-backup-mine.json')};
+  if(!open){toast('עודכן ממכשיר אחר — הזן שוב',offer);return}
+  clearTimeout(cloudT);cloudT=null;
+  try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=d.rev||0;setBase(tid,d.rev||0);localStorage.setItem(KEY+'.'+tid,d.state)}catch(e){console.error(e)}
+  setSync('saved');closeModal();render();
+  toast('עודכן ממכשיר אחר — הזן שוב',offer);
+}
 function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
 async function pushCloud(force){
   if(!TID||!USER)return false;cloudT=null;clearTimeout(retryT);
@@ -1678,8 +1712,22 @@ async function pushCloud(force){
   setSync('saving');
   const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
+  const tid=TID,rev=body.rev,base=CLOUD_REV,ref=FB.doc(FB.db,'tournaments',tid);
   try{
-    await FB.setDoc(FB.doc(FB.db,'tournaments',TID),body,{merge:true});
+    if(!FB.runTransaction){await FB.setDoc(ref,body,{merge:true})}
+    else{
+      const conflict=await FB.runTransaction(FB.db,async tx=>{
+        const snap=await tx.get(ref);
+        if(snap.exists()){const d=snap.data();const rr=d.rev||0;
+          // מותר לכתוב: אין עדיין מצב בענן, או שהגרסה בענן היא שלנו, או שלא נוספה גרסה אחרי זו שאנחנו מכירים.
+          // כשלא ידוע על איזו גרסה התבססנו (נפתח מהמטמון לפני הסנכרון הראשון) — ההתנהגות הקודמת: רק אם המקומי חדש יותר.
+          const ok=!d.state||d.client===CLIENT||(base!=null?rr<=base:rr<rev);
+          if(!ok)return d;}
+        tx.set(ref,body,{merge:true});return null;
+      });
+      if(conflict){retryN=0;syncErr=null;onCloudConflict(tid,conflict,body.state);return false}
+    }
+    setBase(tid,rev);
     retryN=0;syncErr=null;setSync('saved');return true;
   }catch(e){
     console.error('pushCloud',e);syncErr=e;setSync('error');
@@ -1703,7 +1751,7 @@ window.addEventListener('offline',()=>setSync('offline'));
 window.addEventListener('beforeunload',e=>{if(syncState==='error'||syncState==='pending'||syncState==='saving'||syncState==='offline'){e.preventDefault();e.returnValue=''}});
 
 /* ---------- Connection diagnostics ---------- */
-const RULE_TEXT=`match /tournaments/{id} {\n  allow read, write: if hasProfile();\n}`;
+const RULE_TEXT=`match /tournaments/{id} {\n  allow read: if hasProfile();\n  allow create, update: if hasProfile()\n    && request.resource.data.get('state', '') is string;\n  allow delete: if hasPerm('competitions');\n}`;
 async function diagnostics(){
   modal('<h2>בדיקת שמירה בענן</h2><p class="muted">בודק…</p>');
   const rows=[];
@@ -1721,10 +1769,10 @@ async function diagnostics(){
   let localKB=0;try{localKB=Math.round((localStorage.getItem(KEY+'.'+TID)||'').length/1024)}catch(e){}
   const allOk=readOk&&writeOk;
   const fix=(!readOk||!writeOk)?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
-    חסרה הרשאה ל-Firestore. בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, ולהוסיף בתוך הבלוק <code>match /databases/{database}/documents { … }</code> הקיים את השורות הבאות, ואז Publish.<br>
-    הכללים מנוהלים כקובץ <code>firestore.rules</code> במאגר של אפליקציית הנוכחות — כדאי להוסיף אותן גם שם, אחרת העדכון הבא ימחק אותן.
+    חסרה הרשאה ל-Firestore. הכלל של התחרויות <b>כבר נמצא</b> בקובץ <code>firestore.rules</code> במאגר של אפליקציית הנוכחות (הוא מופיע למטה רק לבדיקה). אין להדביק בלוק <code>match /tournaments</code> נוסף.<br>
+    כנראה שהקובץ העדכני עוד לא פורסם: בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, לוודא שהכלל הזה מופיע שם פעם אחת בדיוק. אם לא — לפרסם את הקובץ <code>firestore.rules</code> כולו, ואז Publish.
     <pre style="background:#fff;border:1px solid var(--edge);border-radius:8px;padding:10px;overflow:auto;font-size:12px;direction:ltr;text-align:left">${esc(RULE_TEXT.replace(/\\n/g,'\n'))}</pre>
-    <button onclick="navigator.clipboard.writeText(${JSON.stringify(RULE_TEXT).replace(/"/g,'&quot;')}.replace(/\\n/g,String.fromCharCode(10)));toast('הועתק')">העתקת הכלל</button></div>`:'';
+    <button onclick="navigator.clipboard.writeText(${esc(JSON.stringify(RULE_TEXT))}.replace(/\\n/g,String.fromCharCode(10)));toast('הועתק')">העתקת הכלל</button></div>`:'';
   modal(`<h2>בדיקת שמירה בענן</h2>
   <ul class="plist" style="margin-top:12px">${rows.map(r=>`<li><span style="font-size:18px">${r.ok?'✅':'❌'}</span><span class="n">${r.label}</span><span class="club">${esc(r.detail)}</span></li>`).join('')}</ul>
   <div class="explain" style="margin-top:12px">${allOk?'הכול תקין. כל שינוי נשמר בענן תוך פחות משנייה.':'התחרות ממשיכה לעבוד ונשמרת במכשיר הזה'+(localKB?` (${localKB}KB)`:'')+'. ברגע שההרשאה תתוקן, הכול יעלה לענן אוטומטית.'}</div>
@@ -1743,7 +1791,7 @@ async function importFromClub(){
     const byG={};players.forEach(p=>(byG[groups[p.groupId]||'ללא קבוצה']=byG[groups[p.groupId]||'ללא קבוצה']||[]).push(p));
     modal(`<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">סמנו את המשתתפים. שם הקבוצה נשמר כ"מועדון" — כך ההגרלה מפרידה חברי קבוצה לבתים שונים.</p>
     <div style="max-height:55vh;overflow:auto">${Object.entries(byG).map(([g,list])=>`<div style="margin-top:10px"><label class="chip" style="font-weight:700"><input type="checkbox" onchange="this.closest('div').querySelectorAll('.pi').forEach(c=>c.checked=this.checked)">${esc(g)} (${list.length})</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${p.id}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${S.players.some(x=>x.name===p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${esc(p.id)}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${S.players.some(x=>x.name===p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" onclick="doImport()">הוסף את המסומנים</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
   }catch(e){console.error(e);modal('<h2>ייבוא</h2><div class="err-box">לא הצלחתי לקרוא את רשימת השחקנים. בדקו הרשאות ב-Firestore.</div><div class="row" style="margin-top:12px"><button onclick="closeModal()">סגור</button></div>')}
 }
@@ -1770,16 +1818,16 @@ function pubDraw(){
   let body='';
   if(sc==='now'){
     body=`<div class="tables">${S.tables.map(t=>{const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
-      return m?`<div class="table"><div class="tnum"><span>שולחן ${t.n}</span><span>${matchLabel(m)}</span></div><div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div><div class="meta"></div></div>`
-      :`<div class="table free"><div class="tnum"><span>שולחן ${t.n}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>`;
+      return m?`<div class="table"><div class="tnum"><span>שולחן ${esc(t.n)}</span><span>${esc(matchLabel(m))}</span></div><div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div><div class="meta"></div></div>`
+      :`<div class="table free"><div class="tnum"><span>שולחן ${esc(t.n)}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>`;
   } else if(sc==='next'){
-    body=`<div class="next"><h2>להתכונן — הבאים בתור</h2><ul style="padding:0;margin:0">${q.slice(0,8).map(x=>`<li><span>${esc(sideName(x.m,1))} נגד ${esc(sideName(x.m,2))}</span><small>${matchLabel(x.m)}</small></li>`).join('')||'<li>אין משחקים ממתינים</li>'}</ul></div>`;
+    body=`<div class="next"><h2>להתכונן — הבאים בתור</h2><ul style="padding:0;margin:0">${q.slice(0,8).map(x=>`<li><span>${esc(sideName(x.m,1))} נגד ${esc(sideName(x.m,2))}</span><small>${esc(matchLabel(x.m))}</small></li>`).join('')||'<li>אין משחקים ממתינים</li>'}</ul></div>`;
   } else if(sc==='results'){
     const dn=S.matches.filter(m=>m.status==='done'&&!m.bye).slice(-8).reverse();
-    body=`<div class="next"><h2>תוצאות אחרונות</h2><ul style="padding:0;margin:0">${dn.map(m=>`<li><span>${esc(sideName(m,m.winSide||(m.winner===sideIds(m,1)[0]?1:2)))} ניצח/ה</span><small>${m.score?m.score.join(':'):setsWon(m).join(':')} · ${esc(sideName(m,(m.winSide||(m.winner===sideIds(m,1)[0]?1:2))===1?2:1))}</small></li>`).join('')||'<li>עדיין אין תוצאות</li>'}</ul></div>`;
+    body=`<div class="next"><h2>תוצאות אחרונות</h2><ul style="padding:0;margin:0">${dn.map(m=>`<li><span>${esc(sideName(m,m.winSide||(m.winner===sideIds(m,1)[0]?1:2)))} ניצח/ה</span><small>${esc(m.score?m.score.join(':'):setsWon(m).join(':'))} · ${esc(sideName(m,(m.winSide||(m.winner===sideIds(m,1)[0]?1:2))===1?2:1))}</small></li>`).join('')||'<li>עדיין אין תוצאות</li>'}</ul></div>`;
   } else if(sc==='table'){
     const sy=sys();let rows=[];
-    if(sy==='groups-ko'&&!S.koBuilt){rows=S.groups.map(g=>{const r=rankGroup(g.id);return `<div style="margin-bottom:14px"><h2 style="font-size:22px">${g.name}</h2>${r.order.map((id,i)=>`<div style="font-size:22px;padding:4px 0;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.12)"><span>${i+1}. ${esc(pname(id))}</span><span>${r.stats[id].mp}</span></div>`).join('')}</div>`});
+    if(sy==='groups-ko'&&!S.koBuilt){rows=S.groups.map(g=>{const r=rankGroup(g.id);return `<div style="margin-bottom:14px"><h2 style="font-size:22px">${esc(g.name)}</h2>${r.order.map((id,i)=>`<div style="font-size:22px;padding:4px 0;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.12)"><span>${i+1}. ${esc(pname(id))}</span><span>${r.stats[id].mp}</span></div>`).join('')}</div>`});
       body=`<div style="columns:${Math.min(3,S.groups.length)};column-gap:30px">${rows.join('')}</div>`;
     } else {
       const st=sy==='swiss'?swissStandings().map(x=>[pname(x.id),x.mp+' נק׳']):isTeamSys()?amStandings().map(x=>[pname(x.id),x.pts+' נק׳']):sy==='king'?S.players.map(p=>[p.name,((S.kingCrowns||{})[p.id]||0)+' נצ׳']).sort((a,b)=>parseInt(b[1])-parseInt(a[1])):finalRanking().map(x=>[x.p.name,x.extra||'']);
@@ -1805,11 +1853,11 @@ render();
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserLocalPersistence} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {getFirestore,doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {getFirestore,doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyCmEVnBSkODaCZyrdEdO0vNQtvOnvgsQiA",authDomain:"ttcmh-2a752.firebaseapp.com",projectId:"ttcmh-2a752",storageBucket:"ttcmh-2a752.firebasestorage.app",messagingSenderId:"198162387540",appId:"1:198162387540:web:f4c4728a39aed9468c13c1"};
 const app=initializeApp(cfg);const auth=getAuth(app);const db=getFirestore(app);
 setPersistence(auth,browserLocalPersistence).catch(()=>{});
-window.FB={auth,db,onAuthStateChanged,signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),signOut:()=>signOut(auth),doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc};
+window.FB={auth,db,onAuthStateChanged,signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),signOut:()=>signOut(auth),doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction};
 window.dispatchEvent(new Event('fb-ready'));
 </script>
 </body>
