@@ -381,9 +381,9 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
   transition:border-color .18s var(--ease),transform .18s var(--ease),box-shadow .18s var(--ease);
 }
 .tlist li:hover{border-color:var(--act);transform:translateY(-2px);box-shadow:var(--shadow-2)}
-.tlist .tn{font-weight:700;font-size:1.1em}
+.tlist .tn{font-weight:700;font-size:1.18em}
 .tlist .chev{color:var(--ink-3);font-size:1.4em;line-height:1}
-.hero{background:var(--act-soft);border-radius:22px;padding:22px 20px;margin-bottom:18px}
+.hero{background:linear-gradient(160deg,#EAF0F5 0%,#F7FAFC 100%);border-radius:22px;padding:24px 22px;margin-bottom:20px;box-shadow:var(--shadow-2)}
 .hero .lbl{color:var(--ink-2);font-size:.95em}
 .hero h2{font-size:clamp(24px,2.4vw,30px);font-weight:800;margin:8px 0 6px}
 .hero .meta{color:var(--ink-2);margin-bottom:18px}
@@ -1718,13 +1718,16 @@ function onCloudConflict(tid,d,pushed){
   // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
   const open=TID===tid;const mine=open?JSON.stringify(S):pushed;let nm='tournament';try{nm=JSON.parse(mine).settings.name||nm}catch(e){}
   try{localStorage.setItem(KEY+'.'+tid+'.conflict',mine)}catch(e){}
-  const offer={label:'גיבוי שלי',fn:()=>dl(new Blob([mine],{type:'application/json'}),nm+'-backup-mine.json')};
+  const offer={label:'החזר את השינויים שלי',fn:()=>restoreMine(tid)};
   if(!open){toast('עודכן ממכשיר אחר — הזן שוב',offer);return}
   clearTimeout(cloudT);cloudT=null;
   try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=d.rev||0;setBase(tid,d.rev||0);localStorage.setItem(KEY+'.'+tid,d.state)}catch(e){console.error(e)}
   setSync('saved');closeModal();render();
   toast('עודכן ממכשיר אחר — הזן שוב',offer);
 }
+// שחזור השינויים שהמכשיר הזה עשה בזמן שהענן כבר עודכן ממכשיר אחר. לא דורסים אוטומטית: המשתמש בוחר.
+function restoreMine(tid){const raw=localStorage.getItem(KEY+'.'+tid+'.conflict');if(!raw)return;if(TID!==tid){toast('פתחו את התחרות ולחצו שוב');return}
+  try{S=Object.assign(fresh(),JSON.parse(raw));S.rev=CLOUD_REV||S.rev;localStorage.removeItem(KEY+'.'+tid+'.conflict');commit();toast('השינויים שלך הוחזרו')}catch(e){toast('לא הצלחנו לשחזר')}}
 function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
 /* שמירות לענן רצות אחת אחרי השנייה (לא במקביל): שמירה איטית שנשלחה קודם לא יכולה לנחות אחרי שמירה חדשה יותר
    של אותו מכשיר ולהחזיר את הענן אחורה. התוכן נלכד ברגע הקריאה; שמירה שממתינה בתור מתעדכנת לתוכן האחרון. */
