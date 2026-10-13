@@ -1767,13 +1767,16 @@ window.addEventListener('offline',()=>setSync('offline'));
 window.addEventListener('beforeunload',e=>{if(syncState==='error'||syncState==='pending'||syncState==='saving'||syncState==='offline'){e.preventDefault();e.returnValue=''}});
 
 /* ---------- Connection diagnostics ---------- */
-const RULE_TEXT=`match /tournaments/{id} {\n  allow read: if hasProfile();\n  allow create, update: if hasProfile()\n    && request.resource.data.get('state', '') is string;\n  allow delete: if hasPerm('competitions');\n}`;
+const RULE_TEXT=`match /tournaments/{id} {\n  allow read: if hasProfile();\n  allow create, update: if canCompete()\n    && request.resource.data.get('state', '') is string;\n  allow delete: if hasPerm('competitions');\n}`;
+// אותו היגיון כמו canCompete() בכללי Firestore ו-userPermissions() באפליקציית הנוכחות
+function canCompete(){if(!PROFILE)return false;const r=String(PROFILE.role||'').trim().toLowerCase();if(r==='admin')return true;if(Array.isArray(PROFILE.permissions))return PROFILE.permissions.includes('competitions');return r==='coach'||r==='viewer'}
 async function diagnostics(){
   modal('<h2>בדיקת שמירה בענן</h2><p class="muted">בודק…</p>');
   const rows=[];
   const add=(ok,label,detail)=>rows.push({ok,label,detail:detail||''});
   add(!!USER,'מחובר למשתמש',USER?USER.email:'לא מחובר');
   add(!!PROFILE,'המשתמש מוגדר במועדון',PROFILE?(PROFILE.name||'')+' · '+(PROFILE.role||''):'לא נמצא ב-users');
+  if(PROFILE)add(canCompete(),'הרשאת תחרויות',canCompete()?'':'אין — המנהל מוסיף "תחרויות ודירוג" במסך ניהול הרשאות');
   add(navigator.onLine,'חיבור לאינטרנט',navigator.onLine?'':'המכשיר לא מקוון');
   let readOk=false,writeOk=false,readErr='',writeErr='';
   try{await FB.getDocs(FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc')));readOk=true}
@@ -1784,7 +1787,9 @@ async function diagnostics(){
   add(writeOk,'כתיבה לענן',writeErr);
   let localKB=0;try{localKB=Math.round((localStorage.getItem(KEY+'.'+TID)||'').length/1024)}catch(e){}
   const allOk=readOk&&writeOk;
-  const fix=(!readOk||!writeOk)?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
+  const fix=(PROFILE&&readOk&&!writeOk&&!canCompete())?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
+    למשתמש הזה אין הרשאת תחרויות, ולכן אפשר לצפות בתחרויות אבל לא לשמור. המנהל מוסיף אותה באפליקציית הנוכחות: ניהול הרשאות ⟵ "תחרויות ודירוג".</div>`
+    :(!readOk||!writeOk)?`<div class="warn-box" style="margin-top:14px"><b>מה לעשות</b><br>
     חסרה הרשאה ל-Firestore. הכלל של התחרויות <b>כבר נמצא</b> בקובץ <code>firestore.rules</code> במאגר של אפליקציית הנוכחות (הוא מופיע למטה רק לבדיקה). אין להדביק בלוק <code>match /tournaments</code> נוסף.<br>
     כנראה שהקובץ העדכני עוד לא פורסם: בקונסולת Firebase של הפרויקט <b>ttcmh-2a752</b>: Firestore Database ⟵ לשונית Rules, לוודא שהכלל הזה מופיע שם פעם אחת בדיוק. אם לא — לפרסם את הקובץ <code>firestore.rules</code> כולו, ואז Publish.
     <pre style="background:#fff;border:1px solid var(--edge);border-radius:8px;padding:10px;overflow:auto;font-size:12px;direction:ltr;text-align:left">${esc(RULE_TEXT.replace(/\\n/g,'\n'))}</pre>
