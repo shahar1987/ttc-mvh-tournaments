@@ -188,6 +188,21 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
 .stat{display:flex;gap:clamp(14px,2.5vw,28px);flex-wrap:wrap}
 .stat b{font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(20px,2.4vw,27px);display:block;line-height:1.05}
 .stat span{font-size:.76em;color:var(--ink-3)}
+/* לוח בקרה: התראות קודם, אחר כך מספרים, התקדמות ושולחנות */
+.dash-alerts{display:grid;gap:8px;margin-bottom:14px}
+.dash-alert{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 14px;border-radius:12px;border:1px solid #E3CF9E;border-right:5px solid var(--warn);background:#F7EFDD;color:#3a2b0b;font-weight:600}
+.dash-alert.ok{border-color:#B9D8C2;border-right-color:#2E7D4F;background:#E9F4EC;color:#163d26}
+.dash-alert.go{border-color:#B7C7DC;border-right-color:var(--act);background:#E8EEF6;color:#14263d}
+.dash-alert button{min-height:44px}
+.dash-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.dash-kpi{background:var(--card);border:1px solid var(--edge);border-radius:var(--r-soft);padding:12px 14px;box-shadow:var(--shadow-1)}
+.dash-kpi b{display:block;font-weight:800;font-size:clamp(22px,2.6vw,30px);font-variant-numeric:tabular-nums;line-height:1.1}
+.dash-kpi span{font-size:.85em;color:var(--ink-3)}
+.dash-prog{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin:0 0 16px}
+.dash-g{all:unset;box-sizing:border-box;cursor:pointer;min-height:56px;padding:8px 10px;border-radius:12px;background:var(--card);border:1px solid var(--edge);border-right:5px solid var(--gc);display:flex;flex-direction:column;gap:4px}
+.dash-g:focus-visible{outline:3px solid var(--act);outline-offset:2px}
+.dash-g b{font-size:.95em}.dash-g .bar{height:6px;border-radius:3px;background:var(--edge);overflow:hidden}.dash-g .bar i{display:block;height:100%;background:var(--gc)}
+.dash-g.done{opacity:.6}
 .progress{height:8px;background:var(--edge);border-radius:var(--r-pill);overflow:hidden;margin:6px 0 16px}
 .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--felt-2),var(--felt));transition:width .6s var(--ease)}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--edge);margin-bottom:16px;overflow-x:auto;scrollbar-width:none}
@@ -472,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.10';
+const APP_VER='2026-10-17.11';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -480,7 +495,7 @@ const GROUP_COLORS=['#2E7D6B','#3B5A7F','#B24B41','#6B5B95','#9A6B18','#2F7F86',
 const DEF={
   phase:'setup',
   settings:{name:'',date:new Date().toISOString().slice(0,10),system:'groups-ko',format:'singles',boGroup:5,boKO:5,tables:4,groupSize:4,advance:2,consolation:true,third:false,restMin:5,model:'group',auto:true,stuckMult:1.5,swissRounds:5,swissKO:false,swissAdvance:4,rounds:6,target:21,kingTarget:11},
-  players:[],groups:[],matches:[],tables:[],lots:{},log:[],lastPlayed:{},tab:'tables',avgDur:{}, koBuilt:false, lastUndo:null, kingQueue:[], kingHolders:{}, byes:[]
+  players:[],groups:[],matches:[],tables:[],lots:{},log:[],lastPlayed:{},tab:'dash',avgDur:{}, koBuilt:false, lastUndo:null, kingQueue:[], kingHolders:{}, byes:[]
 };
 let S=fresh();
 function fresh(){const o=JSON.parse(JSON.stringify(DEF));o.settings.date=todayIL();return o}
@@ -1004,9 +1019,9 @@ function renderLive(app){
   <div class="row" style="margin-bottom:10px"><input id="pSearch" placeholder="🔎 חיפוש שחקן — מתי הוא משחק?" oninput="playerSearch(this.value)" style="max-width:340px"></div>
   <div id="pSearchOut"></div>
   <div class="tabs">
-    ${[['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt||sy==='groups-ko').map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
+    ${[['dash','לוח בקרה'],['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt||sy==='groups-ko').map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
   </div>
-  <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'||sy==='groups-ko'?tab:'tables']()}</div>
+  <div id="tabBody">${({dash:dashTab,tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab}[S.koBuilt||tab!=='bracket'||sy==='groups-ko'?tab:'tables']||dashTab)()}</div>
   <div class="toolbar LIVEBAR">
     ${!koPhase&&sy==='groups-ko'&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו, בונים את עץ הנוקאאוט</button>`:''}
     ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בניית נוקאאוט ל-${esc(S.settings.swissAdvance)} המובילים</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`):''}
@@ -1020,7 +1035,7 @@ function renderLive(app){
     <button onclick="shareSummary()">📤 שתף סיכום</button>
   </div>`;
   const bar=app.querySelector('.LIVEBAR');bar.classList.remove('LIVEBAR');if(!bar.querySelector('.primary'))bar.classList.add('static');
-  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){if(S.tab==='tables')document.getElementById('tabBody').innerHTML=tablesTab()}else clearInterval(ticker)},30000);
+  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){if(S.tab==='tables'||S.tab==='dash')document.getElementById('tabBody').innerHTML=(S.tab==='dash'?dashTab:tablesTab)()}else clearInterval(ticker)},30000);
 }
 function estimateFinish(){
   const sy=sys();const par=Math.max(1,S.tables.length);
@@ -1074,6 +1089,39 @@ function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n
   if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
   logEv('נוסף שחקן: '+n,'player');closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
+function dashTab(){
+  const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
+  const playing=S.matches.filter(m=>m.status==='playing');const pend=pendingMatches();
+  const stuck=playing.filter(m=>m.startedAt&&now-m.startedAt>avg*S.settings.stuckMult);
+  const busy=busyPids();const free=S.tables.filter(t=>!t.matchId).length;
+  const ready=pend.filter(m=>!matchPids(m).some(id=>busy.has(id)));
+  const longWait=[...new Set(ready.flatMap(m=>matchPids(m)))].filter(id=>now-idleSince(id)>=20*60000);
+  const out=(S.out||[]).length;const active=S.players.length-out;
+  const al=[];
+  if(!S.koBuilt&&sys()==='groups-ko'&&allGroupsDone())al.push(`<div class="dash-alert go"><span>🏁 כל הבתים הסתיימו</span><button class="primary" onclick="buildKO()">בניית עץ הנוקאאוט</button></div>`);
+  if(S.koBuilt&&koFinished())al.push(`<div class="dash-alert go"><span>🏆 כל המשחקים הסתיימו</span><button class="primary" onclick="goto('final')">לפודיום</button></div>`);
+  if(stuck.length===1){const m=stuck[0];al.push(`<div class="dash-alert"><span>⏱ שולחן ${esc(m.table)}: ${esc(sideName(m,1))} – ${esc(sideName(m,2))} כבר ${mins(now-m.startedAt)} דק׳. אולי שכחו לדווח?</span><button onclick="openResult('${ja(m.id)}')">הזנת תוצאה</button></div>`)}
+  else if(stuck.length)al.push(`<div class="dash-alert"><span>⏱ ${stuck.length} שולחנות משחקים יותר מהרגיל. אולי שכחו לדווח? לחצו על שולחן להזנת תוצאה:</span><span class="row" style="gap:6px">${stuck.sort((a,b)=>a.table-b.table).map(m=>`<button onclick="openResult('${ja(m.id)}')">שולחן ${esc(m.table)}</button>`).join('')}</span></div>`);
+  if(free&&ready.length)al.push(`<div class="dash-alert"><span>🟢 ${free} שולחנות פנויים ו-${ready.length} משחקים מוכנים</span><button class="green" onclick="distributeClick()">פיזור לשולחנות</button></div>`);
+  if(longWait.length)al.push(`<div class="dash-alert"><span>⌛ מחכים יותר מ-20 דק׳: ${longWait.slice(0,6).map(id=>esc(pname(id))).join(', ')}${longWait.length>6?' ועוד '+(longWait.length-6):''}</span></div>`);
+  if(!al.length)al.push(`<div class="dash-alert ok"><span>✅ הכל זורם. אין שולחן תקוע ואין משחק שמחכה לשולחן פנוי.</span></div>`);
+  const allMs=S.matches.filter(m=>!m.bye);const doneAll=allMs.filter(m=>m.status==='done').length;
+  const kpi=(v,l)=>`<div class="dash-kpi"><b>${v}</b><span>${l}</span></div>`;
+  let prog='';
+  if(!S.koBuilt&&sys()==='groups-ko')prog=`<div class="section-h"><h2>התקדמות הבתים</h2><span class="tiny">לחיצה פותחת את טבלאות הבתים</span></div><div class="dash-prog">${S.groups.map(g=>{const gm=S.matches.filter(m=>m.stage==='group'&&m.groupId===g.id);const d=gm.filter(m=>m.status==='done').length;const pl=gm.filter(m=>m.status==='playing').length;
+    return `<button class="dash-g ${gm.length&&d===gm.length?'done':''}" style="--gc:${gcolor(g.id)}" onclick="S.tab='groups';commit()"><b>${esc(g.name)}</b><span class="tiny">${d}/${gm.length} משחקים${pl?` · ${pl} על שולחן`:''}${gm.length&&d===gm.length?' · ✓ הסתיים':''}</span><span class="bar"><i style="width:${gm.length?d/gm.length*100:0}%"></i></span></button>`}).join('')}</div>`;
+  if(S.koBuilt){const sec=(lbl,f)=>{const ms=S.matches.filter(m=>m.stage==='ko'&&!m.bye&&f(m.bracket||''));if(!ms.length)return '';const d=ms.filter(m=>m.status==='done').length;const nx=ms.filter(m=>m.status!=='done').sort((a,b)=>a.koRound-b.koRound)[0];
+      return `<button class="dash-g ${d===ms.length?'done':''}" style="--gc:var(--act)" onclick="S.tab='bracket';commit()"><b>${lbl}</b><span class="tiny">${d}/${ms.length} משחקים${nx?' · עכשיו: '+esc(koRoundName(nx)):' · ✓ הסתיים'}</span><span class="bar"><i style="width:${d/ms.length*100}%"></i></span></button>`};
+    prog=`<div class="section-h"><h2>התקדמות הנוקאאוט</h2><span class="tiny">לחיצה פותחת את העץ</span></div><div class="dash-prog" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">${sec('נוקאאוט עליון',b=>b==='main')}${sec('נוקאאוט תחתון',b=>b.startsWith('cons'))}</div>`}
+  return `<div class="dash-alerts" role="status" aria-live="polite">${al.join('')}</div>
+  <div class="dash-kpis">${kpi(`${doneAll}/${allMs.length}`,'משחקים שהסתיימו')}${kpi(`${playing.length}/${S.tables.length}`,'שולחנות פעילים')}${kpi(pend.length,'משחקים בתור')}${kpi(avg?Math.round(avg/60000)+' דק׳':'—','משחק ממוצע')}${kpi(estimateFinish()||'—','סיום צפוי')}${kpi(active+(out?` <small class="tiny">(${out} יצאו)</small>`:''),'שחקנים בתחרות')}</div>
+  ${prog}
+  ${tablesTab()}
+  <div class="row" style="margin-top:14px;flex-wrap:wrap">
+    ${S.lastUndo?'<button onclick="undoLast()">↩ ביטול התוצאה האחרונה</button>':''}
+    <button onclick="goto('players')">👥 שחקנים (יציאה מהתחרות)</button>
+    ${S.settings.publicLink?`<button onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">🔗 העתקת קישור הצפייה</button>`:''}
+  </div>`}
 function tablesTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
   const groupPhase=!S.koBuilt;
@@ -1337,7 +1385,7 @@ function doLateEntry(){
 /* ========================= SWISS ========================= */
 function startSwiss(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.byes=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
-  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
   if(!S.settings.swissRounds)S.settings.swissRounds=suggestSwissRounds(S.players.length);
   swissNextRound();logEv(`התחילה תחרות שוויצרית — ${S.settings.swissRounds} סיבובים`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
@@ -1389,7 +1437,7 @@ function swissTab(){
 /* ========================= AMERICANO / MEXICANO ========================= */
 function startAmericano(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
-  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
   americanoRound(1);logEv(`התחיל ${SYSTEMS[sys()].n} — ${S.settings.rounds} סיבובים, עד ${S.settings.target} נק׳`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function amStandings(){
@@ -1452,7 +1500,7 @@ function amTab(){
 /* ========================= KING OF THE TABLE ========================= */
 function startKing(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
-  S.lastPlayed={};S.phaseStart=Date.now();S.tab='tables';S.kingCrowns={};S.kingHolders={};
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';S.kingCrowns={};S.kingHolders={};
   S.kingQueue=shuffle(S.players.map(p=>p.id));
   logEv(`התחיל מלך השולחן — עד ${S.settings.kingTarget} נק׳`,'start');goto('live');kingFill();commit();
 }
