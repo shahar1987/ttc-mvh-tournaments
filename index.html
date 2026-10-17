@@ -583,6 +583,7 @@ function renderSetup(app){
     <div class="row">
       <label class="chip ${s.consolation?'on':''}"><input type="checkbox" ${s.consolation?'checked':''} ${locked?'disabled':''} onchange="S.settings.consolation=this.checked;commit()">בית ניחומים לשאר השחקנים</label>
       <label class="chip ${s.third?'on':''}"><input type="checkbox" ${s.third?'checked':''} ${locked?'disabled':''} onchange="S.settings.third=this.checked;commit()">משחק על מקום 3</label>
+      ${s.consolation?`<label class="chip ${s.consPlace?'on':''}" title="מי שמפסיד בניחומים ממשיך לשחק על מקומות, כך שכל אחד מסיים עם מקום מדויק"><input type="checkbox" ${s.consPlace?'checked':''} ${S.koBuilt?'disabled':''} onchange="S.settings.consPlace=this.checked;commit()">דירוג מלא בניחומים</label>`:''}
     </div>`:''}
     ${s.system==='swiss'?`<div class="grid2">
       <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
@@ -927,7 +928,7 @@ function priority(m,now){
     const minRound=pend.length?Math.min(...pend.map(x=>x.round)):m.round;
     sc-=100*(m.round-minRound);why.push('סיבוב '+m.round);
   }else if(m.stage==='king'){why.push('מלך השולחן')}
-  else{sc-=100*m.koRound;why.push(m.bracket==='cons'?'ניחומים':'נוקאאוט'+' · '+koRoundName(m))}
+  else{sc-=100*m.koRound;why.push(isCons(m.bracket)?'ניחומים · '+koRoundName(m):'נוקאאוט'+' · '+koRoundName(m))}
   const pids=matchPids(m);
   const idle=Math.max(...pids.map(id=>now-idleSince(id)));sc+=2*mins(idle);
   const restMs=S.settings.restMin*60000;const lastEnd=Math.max(0,...pids.map(id=>S.lastPlayed[id]||0));
@@ -1095,7 +1096,7 @@ function matchLabel(m){
   if(m.stage==='swiss')return `סיבוב ${m.round}`;
   if(m.stage==='round')return `סיבוב ${m.round} · עד ${m.target||S.settings.target}`;
   if(m.stage==='king')return `מלך השולחן · עד ${m.target||S.settings.kingTarget}`;
-  return (m.bracket==='cons'?'ניחומים · ':'')+koRoundName(m);
+  return (isCons(m.bracket)?'ניחומים · ':'')+koRoundName(m);
 }
 function dropMatch(ev,tn){ev.preventDefault();const id=ev.dataTransfer.getData('m');const m=S.matches.find(x=>x.id===id);const t=S.tables.find(x=>x.n===tn);if(!m||!t||t.matchId||m.status!=='pending')return;const busy=busyPids();if(matchPids(m).some(x=>busy.has(x))){toast('אחד השחקנים משחק עכשיו');return}startOn(t,m);commit()}
 function lockTable(tn){
@@ -1512,8 +1513,9 @@ function buildBracket(entrants,bracket){
   S.matches.push(...ms);
   if(S.settings.third&&bracket==='main'&&rounds>=2)S.matches.push(newMatch({stage:'ko',bracket,koRound:rounds-1,koIndex:1,third:true,p1:null,p2:null}));
   if(bracket==='main')S.koRounds=rounds;else S.consRounds=rounds;
+  if(isPlace(bracket)){S.brRounds={};mkPlace(0,size)}
   // resolve byes
-  ms.filter(m=>m.koRound===0).forEach(m=>{if(m.p1&&!m.p2){m.status='done';m.winner=m.p1;m.bye=true;advanceKO(m)}else if(m.p2&&!m.p1){m.status='done';m.winner=m.p2;m.bye=true;advanceKO(m)}else if(!m.p1&&!m.p2){m.status='done';m.bye=true}});
+  ms.filter(m=>m.koRound===0).forEach(m=>{if(m.p1&&!m.p2){m.status='done';m.winner=m.p1;m.bye=true;advanceKO(m)}else if(m.p2&&!m.p1){m.status='done';m.winner=m.p2;m.bye=true;advanceKO(m)}else if(!m.p1&&!m.p2){m.status='done';m.bye=true;if(isPlace(bracket))advanceKO(m)}});
   return rounds;
 }
 function buildSwissKO(){
@@ -1524,7 +1526,31 @@ function buildSwissKO(){
   S.koBuilt=true;S.tables.forEach(t=>t.lock=null);S.phaseStart=Date.now();S.tab='bracket';
   logEv('נבנה נוקאאוט למובילי השוויצרית','ko');commit();autoDistribute();
 }
+/* ---------- Full placement in consolation: losers keep playing for places ----------
+   Sub-bracket "cons:B" holds the places B+1..B+size (relative to the consolation). */
+function isCons(b){return !!b&&(b==='cons'||b.startsWith('cons:'))}
+function isPlace(b){return !!S.settings.consPlace&&isCons(b)}
+function pBase(b){return b==='cons'?0:+b.split(':')[1]}
+function roundsOf(b){return b==='main'?S.koRounds:b==='cons'?S.consRounds:(S.brRounds||{})[b]||0}
+function koAt(b,r,i){return S.matches.find(x=>x.stage==='ko'&&x.bracket===b&&!x.third&&x.koRound===r&&x.koIndex===i)}
+// every round of a bracket except the final sends its losers to their own bracket
+function mkPlace(base,size){const rounds=Math.log2(size);
+  for(let r=0;r<rounds-1;r++){const n=size/Math.pow(2,r+1),b=base+n,br=Math.log2(n),id='cons:'+b;S.brRounds[id]=br;
+    for(let k=0;k<br;k++)for(let i=0;i<n/Math.pow(2,k+1);i++)S.matches.push(newMatch({stage:'ko',bracket:id,koRound:k,koIndex:i,p1:null,p2:null}));
+    mkPlace(b,n)}}
+function loserTarget(m){const rounds=roundsOf(m.bracket);if(m.koRound>=rounds-1)return null;
+  return koAt('cons:'+(pBase(m.bracket)+Math.pow(2,rounds-m.koRound-1)),0,Math.floor(m.koIndex/2))}
+function feedSlot(t,slot,pid){if(slot===0){t.p1=pid;t.bye1=!pid}else{t.p2=pid;t.bye2=!pid}
+  if(t.status!=='pending'||!(t.p1||t.bye1)||!(t.p2||t.bye2)||(t.p1&&t.p2))return;
+  t.status='done';t.bye=true;t.winner=t.p1||t.p2||null;advanceKO(t)}
+function unfeed(t,slot){if(t.status!=='pending')resetDownstream(t);
+  if(slot===0){t.p1=null;t.bye1=false}else{t.p2=null;t.bye2=false}
+  const tb=S.tables.find(x=>x.matchId===t.id);if(tb)tb.matchId=null;Object.assign(t,{status:'pending',sets:[],winner:null,bye:false,table:null,startedAt:null})}
+function consPlaceOf(id){for(const m of S.matches){if(m.stage!=='ko'||!isPlace(m.bracket)||m.status!=='done'||m.koRound!==roundsOf(m.bracket)-1)continue;
+  if(m.winner===id)return pBase(m.bracket)+1;if(m.p1===id||m.p2===id)return pBase(m.bracket)+2}return null}
 function advanceKO(m){
+  if(isPlace(m.bracket)){const nxt=koAt(m.bracket,m.koRound+1,Math.floor(m.koIndex/2));if(nxt)feedSlot(nxt,m.koIndex%2,m.winner);
+    const t=loserTarget(m);if(t)feedSlot(t,m.koIndex%2,m.winner?(m.winner===m.p1?m.p2:m.p1):null);return}
   const rounds=m.bracket==='main'?S.koRounds:S.consRounds;
   const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));
   if(nxt){if(m.koIndex%2===0)nxt.p1=m.winner;else nxt.p2=m.winner;
@@ -1532,14 +1558,17 @@ function advanceKO(m){
   if(m.koRound===rounds-2&&m.bracket==='main'&&S.settings.third){const t=S.matches.find(x=>x.stage==='ko'&&x.third);if(t&&m.winner){const loser=m.winner===m.p1?m.p2:m.p1;if(m.koIndex===0){t.p1=loser;t.bye1=!loser}else{t.p2=loser;t.bye2=!loser}
     if(t.status==='pending'&&((t.p1&&t.bye2)||(t.p2&&t.bye1))){t.status='done';t.winner=t.p1||t.p2;t.bye=true}}}
 }
-function koHasDownstream(m){const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));return nxt&&nxt.status!=='pending'}
+function koHasDownstream(m){if(isPlace(m.bracket)){const n=koAt(m.bracket,m.koRound+1,Math.floor(m.koIndex/2)),t=loserTarget(m);return !!((n&&n.status!=='pending')||(t&&t.status!=='pending'))}const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));return nxt&&nxt.status!=='pending'}
 function resetDownstream(m){
+  if(isPlace(m.bracket)){const n=koAt(m.bracket,m.koRound+1,Math.floor(m.koIndex/2)),t=loserTarget(m);if(n)unfeed(n,m.koIndex%2);if(t)unfeed(t,m.koIndex%2);return}
   const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));
   if(!nxt)return;if(nxt.status!=='pending')resetDownstream(nxt);
   if(m.koIndex%2===0)nxt.p1=null;else nxt.p2=null;
   const t=S.tables.find(x=>x.matchId===nxt.id);if(t)t.matchId=null;nxt.status='pending';nxt.sets=[];nxt.winner=null;nxt.table=null;nxt.startedAt=null;
 }
-function koRoundName(m){const rounds=m.bracket==='main'?S.koRounds:S.consRounds;if(m.third)return 'מקום 3';const left=rounds-m.koRound;return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`}
+function koRoundName(m){const rounds=roundsOf(m.bracket);if(m.third)return 'מקום 3';const left=rounds-m.koRound;
+  if(m.bracket&&m.bracket.startsWith('cons:')){const b=pBase(m.bracket);return left===1?`על מקום ${b+1}`:`מקומות ${b+1}-${b+Math.pow(2,rounds)} · `+(left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`)}
+  if(m.bracket==='cons'&&S.settings.consPlace&&left===1)return 'גמר (מקום 1)';return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`}
 function koFinished(){if(S.koWinner&&!S.matches.some(m=>m.stage==='ko'&&m.bracket==='main'))return true;const ko=S.matches.filter(m=>m.stage==='ko');return ko.length>0&&ko.every(m=>m.status==='done')}
 function bracketTab(){
   const draw=(bracket,rounds,title)=>{const ms=S.matches.filter(m=>m.stage==='ko'&&m.bracket===bracket);if(!ms.length)return '';
@@ -1547,7 +1576,8 @@ function bracketTab(){
     ${S.settings.third&&bracket==='main'?`<div class="round"><h4>מקום 3</h4>${ms.filter(m=>m.third).map(bm).join('')}</div>`:''}</div>`};
   const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
     return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
-  return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'עץ ניחומים'):'');
+  const subs=Object.keys(S.brRounds||{}).filter(b=>isPlace(b)&&S.matches.some(m=>m.bracket===b&&(m.p1||m.p2))).sort((a,b)=>pBase(a)-pBase(b));
+  return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'עץ ניחומים'):'')+subs.map(b=>draw(b,roundsOf(b),`ניחומים · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
 }
 function logTab(){
   const days={};
@@ -1586,6 +1616,7 @@ function finalRanking(){
     if(third){if(third.winner===id)return 2;if(third.p1===id||third.p2===id)return 3}
     if(eliminatedAt[id]!=null)return 10+ (S.koRounds-eliminatedAt[id]);
     const inMain=main.some(m=>m.p1===id||m.p2===id);if(inMain)return 10;
+    if(S.settings.consPlace){const pl=consPlaceOf(id);if(pl!=null)return 50+pl}
     const cons=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='cons');const cf=cons.find(m=>m.koRound===S.consRounds-1);
     if(cf&&cf.winner===id)return 50;if(cf&&cf.status==='done'&&(cf.p1===id||cf.p2===id))return 51;
     const ce={};for(const m of cons){if(m.status!=='done'||m.bye)continue;const l=m.winner===m.p1?m.p2:m.p1;ce[l]=m.koRound}
