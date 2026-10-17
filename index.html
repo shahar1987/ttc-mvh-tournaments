@@ -515,7 +515,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.25';
+const APP_VER='2026-10-17.26';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -589,6 +589,7 @@ function renderSteps(){
 
 /* ========================= RENDER ========================= */
 function render(){
+  if(S.phase==='setup')keepSetup();
   const app=document.getElementById('app');
   document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID));
   if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
@@ -695,8 +696,10 @@ function wizard(){
   document.getElementById('wzGo').onclick=()=>{const r=calc();setSystem(r);if(r==='swiss')S.settings.swissRounds=suggestSwissRounds(S.players.length||24);closeModal();commit();toast('השיטה הוגדרה: '+SYSTEMS[r].n)};
   calc();
 }
-function saveSetup(){
-  const s=S.settings;const q=id=>document.getElementById(id);
+function saveSetup(){keepSetup();syncTables();goto('players')}
+// מעתיק את מה שהוקלד במסך ההגדרות ל-S.settings, כדי שלחיצה על צ'יפ (שמרנדרת מחדש) לא תמחק אותו
+function keepSetup(){
+  const s=S.settings;const q=id=>document.getElementById(id);if(!q('s_tables'))return;
   if(!S.matches.length){s.name=q('s_name').value.trim();s.date=q('s_date').value;
     if(q('s_bog'))s.boGroup=+q('s_bog').value; if(q('s_bok'))s.boKO=+q('s_bok').value;
     if(q('s_gs'))s.groupSize=+q('s_gs').value; if(q('s_adv'))s.advance=+q('s_adv').value;
@@ -704,7 +707,6 @@ function saveSetup(){
     if(q('s_rounds'))s.rounds=Math.max(1,+q('s_rounds').value||6);
     if(q('s_target'))s.target=+q('s_target').value; if(q('s_king'))s.kingTarget=+q('s_king').value;}
   s.tables=Math.max(1,+q('s_tables').value||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
-  syncTables();goto('players');
 }
 function syncTables(){
   const n=S.settings.tables;const before=S.tables.length;
@@ -789,7 +791,7 @@ function planFor(n,ng){
   const avg=avgDuration(S.settings.boGroup)/60000;
   const par=Math.max(1,Math.min(S.settings.tables,ng*(S.settings.model==='group'?1:99)));
   const est=Math.ceil(matches/Math.max(1,S.settings.tables)*avg);
-  return {ng,sizes,matches,perPlayer,est,ok:Math.min(...sizes)>=3&&Math.max(...sizes)<=5};
+  return {ng,sizes,matches,perPlayer,est,ok:Math.min(...sizes)>=3&&Math.max(...sizes)<=6};
 }
 function bestPlan(n){
   const opts=[];for(let ng=1;ng<=Math.floor(n/3);ng++){const pl=planFor(n,ng);if(pl.ok)opts.push(pl)}
@@ -804,10 +806,11 @@ function suggestText(n){
   if(isTeamSys()){const courts=Math.min(S.settings.tables,Math.floor(n/4));const sit=n-courts*4;return `${n} רשומים — ${courts} שולחנות פעילים בכל סיבוב${sit>0?`, ${sit} ינוחו בכל סיבוב בסבב`:''}.`}
   if(sys()==='king')return `${n} רשומים — תור אחד לכל שולחן, המנצח נשאר.`;
   const p=bestPlan(n)[0];
-  return `${n} רשומים — מומלץ ${p.ng===1?'בית אחד':p.ng+' בתים'} (${planDesc(p)}). כל אחד ישחק לפחות ${p.perPlayer} משחקים, סיום משוער אחרי כ-${p.est} דק׳.`;
+  return `${n} רשומים — מומלץ ${planDesc(p)}. כל אחד ישחק לפחות ${p.perPlayer} משחקים, סיום משוער אחרי כ-${p.est} דק׳.`;
 }
 function planDesc(p){
-  const uniq=[...new Set(p.sizes)].sort((a,b)=>b-a);const parts=uniq.map(u=>`${p.sizes.filter(x=>x===u).length}×${u}`);
+  // "6 בתים של 4" ולא "6×4": בעברית המספרים מתהפכים סביב ה-× ונקראים הפוך
+  const uniq=[...new Set(p.sizes)].sort((a,b)=>b-a);const parts=uniq.map(u=>{const c=p.sizes.filter(x=>x===u).length;return c===1?`בית של ${u}`:`${c} בתים של ${u}`});
   return parts.length<2?parts[0]:parts.slice(0,-1).join(', ')+' ו'+(/^[0-9]/.test(parts[parts.length-1])?'-':'')+parts[parts.length-1];
 }
 function planCard(n){
@@ -817,17 +820,17 @@ function planCard(n){
     <div class="hint">${esc(r)} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
   }
   if(isTeamSys()||sys()==='king')return '';
-  const opts=bestPlan(n).slice(0,4);const cur=S.settings.groupSize;
+  const all=bestPlan(n),rec=all[0].ng,opts=all.slice(0,6).sort((a,b)=>a.ng-b.ng);
   return `<div class="card" style="margin-bottom:14px"><h3>איך לחלק לבתים?</h3><p class="tiny">בחרו אפשרות — אפשר לשנות גם אחרי ההגרלה.</p>
   <div style="overflow-x:auto"><table class="st"><tr><th></th><th>בתים</th><th>גדלים</th><th>משחקים</th><th>לכל שחקן</th><th>זמן משוער</th></tr>
-  ${opts.map((p,i)=>`<tr style="cursor:pointer" onclick="S.settings.groupSize=${p.sizes[0]};S.planNg=${p.ng};commit()"><td>${(S.planNg?S.planNg===p.ng:i===0)?'✅':'○'}</td><td><b>${p.ng}</b></td><td>${[...new Set(p.sizes)].sort((a,b)=>b-a).map(u=>`${p.sizes.filter(x=>x===u).length}×${u}`).join(' + ')}</td><td>${p.matches}</td><td>${p.perPlayer}</td><td>~${p.est} דק׳</td></tr>`).join('')}
+  ${opts.map((p,i)=>`<tr style="cursor:pointer" onclick="S.settings.groupSize=${p.sizes[0]};S.planNg=${p.ng};commit()"><td>${(S.planNg&&opts.some(o=>o.ng===S.planNg)?S.planNg===p.ng:p.ng===rec)?'✅':'○'}</td><td><b>${p.ng}</b>${p.ng===rec?' <span class="tiny">(מומלץ)</span>':''}</td><td>${planDesc(p)}</td><td>${p.matches}</td><td>${p.perPlayer}</td><td>~${p.est} דק׳</td></tr>`).join('')}
   </table></div></div>`;
 }
 
 /* ---------- Draw (snake seeding) ---------- */
 function makeDraw(keepManual){
   const n=S.players.length;
-  let ng=S.planNg||bestPlan(n)[0].ng;
+  const plans=bestPlan(n);let ng=plans.some(x=>x.ng===S.planNg)?S.planNg:plans[0].ng;
   const s1=S.players.filter(p=>p.seed===1).length;if(s1>ng)ng=s1;
   if(n/ng<3&&ng>1)ng=Math.max(1,Math.floor(n/3));
   buildGroups(ng);goto('draw');
@@ -1329,10 +1332,10 @@ function refreshSets(m){
 function quickFill(mid,side){const m=S.matches.find(x=>x.id===mid);const need=needSets(m);for(let i=0;i<need;i++){document.getElementById('a'+i).value=side?0:11;document.getElementById('b'+i).value=side?11:0}refreshSets(m)}
 // quiet: סגירה אוטומטית (שחקן שיצא) — בלי הודעה ובלי לדרוס את 'ביטול' של התוצאה שהוזנה באמת
 function finishMatch(m,winner,sets,flags,quiet){
-  const prev=JSON.parse(JSON.stringify(m));
-  m.sets=sets;m.winner=winner;m.status='done';m.endedAt=Date.now();Object.assign(m,flags||{});
-  if(m.startedAt&&!m.wo){const bo=(m.stage==='group'||m.stage==='swiss')?S.settings.boGroup:S.settings.boKO;const d=S.avgDur[bo]||(S.avgDur[bo]={sum:0,n:0});const dur=m.endedAt-m.startedAt;if(dur>2*60000&&dur<90*60000){d.sum+=dur;d.n++}}
-  const prevLP1=S.lastPlayed[m.p1]||null,prevLP2=S.lastPlayed[m.p2]||null;S.lastPlayed[m.p1]=m.endedAt;S.lastPlayed[m.p2]=m.endedAt;
+  const prev=JSON.parse(JSON.stringify(m));const edit=prev.status==='done';
+  m.sets=sets;m.winner=winner;m.status='done';m.endedAt=edit&&prev.endedAt||Date.now();Object.assign(m,flags||{});
+  if(m.startedAt&&!m.wo&&!edit){const bo=(m.stage==='group'||m.stage==='swiss')?S.settings.boGroup:S.settings.boKO;const d=S.avgDur[bo]||(S.avgDur[bo]={sum:0,n:0});const dur=m.endedAt-m.startedAt;if(dur>2*60000&&dur<90*60000){d.sum+=dur;d.n++}}
+  const prevLP1=S.lastPlayed[m.p1]||null,prevLP2=S.lastPlayed[m.p2]||null;if(!edit){S.lastPlayed[m.p1]=m.endedAt;S.lastPlayed[m.p2]=m.endedAt}
   const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;m.table=null;
   logEv(`${pname(m.winner)} ניצח/ה את ${pname(m.winner===m.p1?m.p2:m.p1)} ${setsWon(m).join(':')}${m.wo?' (טכני)':''}`);
   if(m.stage==='ko')advanceKO(m);
@@ -1356,7 +1359,7 @@ function walkover(mid,absent){const m=S.matches.find(x=>x.id===mid);if(!confirm(
 function withdrawPlayer(pid){if(!confirm(`להוציא את ${pname(pid)} מהתחרות? כל המשחקים שנשארו לו/ה ייסגרו כניצחון טכני ליריב.`))return;S.out=[...(S.out||[]),pid];commit();if(!autoOut())autoDistribute();toast(`${pname(pid)} יצא/ה מהתחרות`)}
 function autoOut(){const out=S.out||[];if(!out.length)return false;const m=S.matches.find(x=>x.status!=='done'&&x.p1&&x.p2&&(out.includes(x.p1)||out.includes(x.p2)));if(!m)return false;
   const absent=out.includes(m.p1)?m.p1:m.p2;const w=absent===m.p1?m.p2:m.p1;const sets=[];for(let i=0;i<needSets(m);i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null},true);return true}
-function retire(mid,who){const m=S.matches.find(x=>x.id===mid);const need=needSets(m);const w=who===m.p1?m.p2:m.p1;const sets=readSets(m).filter(s=>s&&validSet(s[0],s[1]));let a=0,b=0;for(const [x,y] of sets){if(x>y)a++;else b++}while((w===m.p1?a:b)<need){sets.push(w===m.p1?[11,0]:[0,11]);if(w===m.p1)a++;else b++}finishMatch(m,w,sets,{wo:false,retired:who})}
+function retire(mid,who){const m=S.matches.find(x=>x.id===mid);const need=needSets(m);const w=who===m.p1?m.p2:m.p1;const sets=[];let a=0,b=0;for(const s of readSets(m).filter(s=>s&&validSet(s[0],s[1]))){const l=s[0]>s[1]?1:2;if((w===m.p1?l===2&&b>=need-1:l===1&&a>=need-1))continue;sets.push(s);if(l===1)a++;else b++}while((w===m.p1?a:b)<need){sets.push(w===m.p1?[11,0]:[0,11]);if(w===m.p1)a++;else b++}finishMatch(m,w,sets,{wo:false,retired:who})}
 function backToQueue(mid){const m=S.matches.find(x=>x.id===mid);const t=S.tables.find(x=>x.matchId===mid);if(t)t.matchId=null;
   if(m.stage==='king'){S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)];S.matches=S.matches.filter(x=>x.id!==mid);closeModal();commit();return}
   m.status='pending';m.table=null;m.startedAt=null;closeModal();commit()}
@@ -1449,7 +1452,7 @@ function lateEntry(){
   for(const g of groupsSorted){
     const ms=S.matches.filter(m=>m.stage==='group'&&m.groupId===g.id);
     const r1done=ms.filter(m=>m.round===1).every(m=>m.status==='done');
-    const finished=ms.every(m=>m.status==='done');
+    const finished=ms.length>0&&ms.every(m=>m.status==='done');
     if(finished)continue;
     const size=g.pids.length;const warn=[];
     if(size>=S.settings.groupSize)warn.push(`הבית יגדל ל-${size+1}`);
@@ -1505,7 +1508,7 @@ function swissNextRound(){
   const done=swissRoundsDone();
   if(done>=S.settings.swissRounds)return 0;
   const played=new Set();S.matches.filter(m=>m.stage==='swiss'&&m.p1&&m.p2).forEach(m=>{played.add(m.p1+'|'+m.p2);played.add(m.p2+'|'+m.p1)});
-  let pool = done===0 ? S.players.slice().sort((a,b)=>(a.seed||9)-(b.seed||9)).map(p=>p.id) : swissStandings().map(x=>x.id);
+  let pool = (done===0 ? S.players.slice().sort((a,b)=>(a.seed||9)-(b.seed||9)).map(p=>p.id) : swissStandings().map(x=>x.id)).filter(id=>!(S.out||[]).includes(id));
   let bye=null;
   if(pool.length%2){for(let i=pool.length-1;i>=0;i--){if(!(S.byes||[]).includes(pool[i])){bye=pool[i];break}}if(!bye)bye=pool[pool.length-1];pool=pool.filter(x=>x!==bye)}
   let pairs;
@@ -1554,19 +1557,19 @@ function amStandings(){
   return Object.values(st).sort((x,y)=>y.pts-x.pts||y.w-x.w||(y.pts-y.against)-(x.pts-x.against)||pname(x.id).localeCompare(pname(y.id)));
 }
 function americanoRound(r){
-  const n=S.players.length;const courts=Math.min(S.settings.tables,Math.floor(n/4));
+  const out=S.out||[],act=S.players.filter(p=>!out.includes(p.id));const n=act.length;const courts=Math.min(S.settings.tables,Math.floor(n/4));
   if(courts<1){toast('צריך לפחות 4 שחקנים לשולחן אחד');return 0}
   const played={};S.players.forEach(p=>played[p.id]=0);
   const prev=S.matches.filter(m=>m.stage==='round');
   prev.forEach(m=>matchPids(m).forEach(id=>{if(played[id]!=null)played[id]++}));
-  let order = (sys()==='mexicano'&&r>1) ? amStandings().map(x=>x.id) : shuffle(S.players.map(p=>p.id));
+  let order = ((sys()==='mexicano'&&r>1) ? amStandings().map(x=>x.id) : shuffle(S.players.map(p=>p.id))).filter(id=>!out.includes(id));
   const need=courts*4;
   if(order.length>need){
     const bySit=order.slice().sort((a,b)=>played[a]-played[b]);
     const sit=new Set(bySit.slice(need));
     order=order.filter(id=>!sit.has(id));
     S.sitOut=[...sit];
-  } else {order=order.slice(0,Math.floor(order.length/4)*4);S.sitOut=S.players.map(p=>p.id).filter(id=>!order.includes(id))}
+  } else {order=order.slice(0,Math.floor(order.length/4)*4);S.sitOut=act.map(p=>p.id).filter(id=>!order.includes(id))}
   const partnered={},opposed={};prev.forEach(m=>{const A=sideIds(m,1),B=sideIds(m,2);[A,B].forEach(t=>{if(t.length===2){partnered[t[0]+'|'+t[1]]=1;partnered[t[1]+'|'+t[0]]=1}});A.forEach(x=>B.forEach(y=>{opposed[x+'|'+y]=(opposed[x+'|'+y]||0)+1;opposed[y+'|'+x]=opposed[x+'|'+y]}))});
   if(!(sys()==='mexicano'&&r>1)){
     let best=null,bestCost=Infinity;
@@ -1613,10 +1616,10 @@ function kingFill(){
   for(const t of S.tables){
     if(t.matchId)continue;
     let a=S.kingHolders[t.n];
-    if(a&&(busy.has(a)||!P(a)))a=null;
-    let q=S.kingQueue.filter(id=>!busy.has(id)&&P(id));
+    const out=S.out||[];if(a&&(busy.has(a)||!P(a)||out.includes(a)))a=null;
+    let q=S.kingQueue.filter(id=>!busy.has(id)&&P(id)&&!out.includes(id));
     if(!a){a=q.shift();if(!a)continue}
-    q=S.kingQueue.filter(id=>!busy.has(id)&&P(id)&&id!==a);
+    q=S.kingQueue.filter(id=>!busy.has(id)&&P(id)&&id!==a&&!out.includes(id));
     const b=q[0];if(!b)continue;
     S.kingQueue=S.kingQueue.filter(x=>x!==a&&x!==b);busy.add(a);busy.add(b);
     S.kingHolders[t.n]=a;
@@ -1654,6 +1657,7 @@ function buildKO(){
   logEv('נבנה עץ הנוקאאוט','ko');commit();autoDistribute();
 }
 // עץ מוכן מראש: נבנה כבר בזמן הבתים עם מקומות ריקים ("מקום 1 בית A"), וכל בית שנגמר משבץ את שחקניו לבד
+function koSig(){return S.groups.filter(g=>g.pids.length>=2).map(g=>g.id+':'+g.pids.join(',')).join('|')}
 function koPlanned(){return S.matches.some(m=>m.stage==='ko'&&(m.src1||m.src2))}
 // נבנה לבד ברגע שיש משחקי בתים. ההגרלה של העץ קבועה לפי הבתים (seed), כך שכל מכשיר בונה בדיוק אותו עץ
 function prepKO(){
@@ -1663,12 +1667,22 @@ function prepKO(){
   gs.forEach((g,gi)=>g.pids.forEach((_,pos)=>(pos<adv?main:cons).push({pid:null,g:gi,gid:g.id,pos})));
   let h=2166136261;for(const c of gs.map(g=>g.id+':'+g.pids.join(',')).join('|'))h=Math.imul(h^c.charCodeAt(0),16777619);
   const rnd=Math.random;Math.random=()=>{h=Math.imul(h^(h>>>15),h|1)+0x6D2B79F5|0;let t=Math.imul(h^(h>>>7),h|61)^h;return((t^(t>>>14))>>>0)/4294967296};
+  S.koSig=koSig();
   try{S.koRounds=buildBracket(main,'main');S.koWinner=null;if(S.settings.consolation&&cons.length>=2)S.consRounds=buildBracket(cons,'cons')}finally{Math.random=rnd}
 }
 // מתחילים את הנוקאאוט: מעכשיו משחקי העץ שמוכנים עולים לשולחנות
 function startKO(){if(!confirm('להתחיל את הנוקאאוט? משחקים שבהם שני השחקנים ידועים יעלו לשולחנות.'))return;S.koGo=true;logEv('הנוקאאוט התחיל','ko');commit();autoDistribute()}
 function koSync(){
-  prepKO();if(!koPlanned())return;
+  const sig=koSig();
+  if(koPlanned()&&S.koSig!==sig){
+    // עץ ישן בלי חתימה (נבנה לפני העדכון) לא נבנה מחדש
+    if(S.koSig&&!S.koGo&&!S.matches.some(m=>m.stage==='ko'&&(m.status==='playing'||(m.status==='done'&&!m.bye)))){S.matches=S.matches.filter(m=>m.stage!=='ko');S.koRounds=0;S.consRounds=0}
+    else S.koSig=sig}
+  prepKO();
+  // בית אחד ועולה אחד: אין עץ ראשי, מנצח הבית הוא האלוף
+  const gs=S.groups.filter(g=>g.pids.length>=2);
+  if(sys()==='groups-ko'&&gs.length===1&&S.settings.advance===1&&!S.matches.some(m=>m.stage==='ko'&&m.bracket==='main'))S.koWinner=groupDone(gs[0].id)?rankGroup(gs[0].id).order[0]:null;
+  if(!koPlanned())return;
   const ord={};const who=x=>!x||!groupDone(x.gid)?null:((ord[x.gid]=ord[x.gid]||rankGroup(x.gid).order)[x.pos]||null);
   for(const m of S.matches){if(m.stage!=='ko'||!(m.src1||m.src2))continue;
     const a=m.src1?who(m.src1):m.p1,b=m.src2?who(m.src2):m.p2;
@@ -1767,6 +1781,8 @@ function koHasDownstream(m){if(isPlace(m.bracket)){const n=koAt(m.bracket,m.koRo
 function resetDownstream(m){
   if(isPlace(m.bracket)){const n=koAt(m.bracket,m.koRound+1,Math.floor(m.koIndex/2)),t=loserTarget(m);if(n)unfeed(n,m.koIndex%2);if(t)unfeed(t,m.koIndex%2);return}
   const nxt=S.matches.find(x=>x.stage==='ko'&&x.bracket===m.bracket&&!x.third&&x.koRound===m.koRound+1&&x.koIndex===Math.floor(m.koIndex/2));
+  if(m.bracket==='main'&&m.koRound===S.koRounds-2){const th=S.matches.find(x=>x.stage==='ko'&&x.third);
+    if(th){const tt=S.tables.find(x=>x.matchId===th.id);if(tt)tt.matchId=null;if(m.koIndex%2===0)th.p1=null;else th.p2=null;Object.assign(th,{status:'pending',sets:[],winner:null,table:null,startedAt:null})}}
   if(!nxt)return;if(nxt.status!=='pending')resetDownstream(nxt);
   if(m.koIndex%2===0)nxt.p1=null;else nxt.p2=null;
   const t=S.tables.find(x=>x.matchId===nxt.id);if(t)t.matchId=null;nxt.status='pending';nxt.sets=[];nxt.winner=null;nxt.table=null;nxt.startedAt=null;
@@ -1832,7 +1848,7 @@ function finalRanking(){
     const cons=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='cons');const cf=cons.find(m=>m.koRound===S.consRounds-1);
     if(cf&&cf.winner===id)return 50;if(cf&&cf.status==='done'&&(cf.p1===id||cf.p2===id))return 51;
     const ce={};for(const m of cons){if(m.status!=='done'||m.bye)continue;const l=m.winner===m.p1?m.p2:m.p1;ce[l]=m.koRound}
-    if(ce[id]!=null)return 60+(S.consRounds-ce[id]);return 100};
+    if(ce[id]!=null)return 60+(S.consRounds-ce[id]);return 100+(groupRank[id]||0)};
   players.sort((a,b)=>tier(a.id)-tier(b.id)||groupRank[a.id]-groupRank[b.id]);
   let place=1;return players.map((p,i)=>{if(i>0&&tier(players[i-1].id)!==tier(p.id))place=i+1;return {p,place,shared:players.filter(x=>tier(x.id)===tier(p.id)).length>1&&tier(p.id)>1}});
 }
