@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.17';
+const APP_VER='2026-10-17.18';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -532,7 +532,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 // ערך שנכנס למחרוזת JS בתוך onclick='...': הדפדפן מפענח &#39; בחזרה לגרש לפני שה-JS רץ, לכן esc לבד לא מספיק.
 // כל תו שאינו אות/ספרה לטינית הופך ל-\uXXXX, כך שאי אפשר לצאת מהמחרוזת. למזהים רגילים (uid) הפלט זהה לקלט.
 function ja(s){return esc(`${s}`.replace(/[^A-Za-z0-9_\-]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0')))}
-function commit(){save();render();queueMicrotask(markMoves)}
+function commit(){koSync();save();render();queueMicrotask(markMoves)}
 let _ranks={};
 function markMoves(){
   const rows=document.querySelectorAll('table.st tr[data-pid]');
@@ -1106,6 +1106,7 @@ function dashTab(){
   const out=(S.out||[]).length;const active=S.players.length-out;
   const al=[];
   if(!S.koBuilt&&sys()==='groups-ko'&&allGroupsDone())al.push(`<div class="dash-alert go"><span>🏁 כל הבתים הסתיימו</span><button class="primary" onclick="buildKO()">בניית עץ הנוקאאוט</button></div>`);
+  if(sys()==='groups-ko'&&!S.matches.some(m=>m.stage==='ko')&&S.groups.some(g=>groupDone(g.id)))al.push(`<div class="dash-alert go"><span>🏁 יש בתים שהסתיימו. אפשר להכין את עץ הנוקאאוט, והשחקנים ישובצו בו לבד</span><button class="primary" onclick="prepKO()">הכנת העץ עכשיו</button></div>`);
   if(S.koBuilt&&koFinished())al.push(`<div class="dash-alert go"><span>🏆 כל המשחקים הסתיימו</span><button class="primary" onclick="goto('final')">לפודיום</button></div>`);
   if(stuck.length===1){const m=stuck[0];al.push(`<div class="dash-alert"><span>⏱ שולחן ${esc(m.table)}: ${esc(sideName(m,1))} – ${esc(sideName(m,2))} כבר ${mins(now-m.startedAt)} דק׳. אולי שכחו לדווח?</span><button onclick="openResult('${ja(m.id)}')">הזנת תוצאה</button></div>`)}
   else if(stuck.length)al.push(`<div class="dash-alert"><span>⏱ ${stuck.length} שולחנות בלי תוצאה כבר 17 דק׳ ומעלה. מה קורה שם? לחצו על שולחן להזנת תוצאה:</span><span class="row" style="gap:6px">${stuck.sort((a,b)=>a.table-b.table).map(m=>`<button onclick="openResult('${ja(m.id)}')">שולחן ${esc(m.table)}</button>`).join('')}</span></div>`);
@@ -1552,6 +1553,7 @@ function endKing(){if(!confirm('לסיים את מלך השולחן ולעבור
 function seedSlots(n){let a=[1];while(a.length<n){const m=a.length*2+1;const b=[];for(const x of a){b.push(x,m-x)}a=b}return a}// slot order: position i -> seed number
 function buildKO(){
   if(!allGroupsDone())return;
+  if(koPlanned()){koSync();S.koBuilt=true;S.tab='bracket';commit();autoDistribute();return}
   const ranks=S.groups.filter(g=>g.pids.length>=2).map(g=>rankGroup(g.id).order);
   const adv=S.settings.advance;
   const main=[],cons=[];
@@ -1561,6 +1563,29 @@ function buildKO(){
   if(S.settings.consolation&&cons.length>=2)S.consRounds=buildBracket(cons,'cons');
   S.koBuilt=true;S.tables.forEach(t=>t.lock=null);S.phaseStart=Date.now();S.tab='bracket';
   logEv('נבנה עץ הנוקאאוט','ko');commit();autoDistribute();
+}
+// עץ מוכן מראש: נבנה כבר בזמן הבתים עם מקומות ריקים ("מקום 1 בית A"), וכל בית שנגמר משבץ את שחקניו לבד
+function koPlanned(){return S.matches.some(m=>m.stage==='ko'&&(m.src1||m.src2))}
+function prepKO(){
+  if(S.matches.some(m=>m.stage==='ko')||!S.matches.some(m=>m.stage==='group'))return;
+  const adv=S.settings.advance;const main=[],cons=[];
+  S.groups.filter(g=>g.pids.length>=2).forEach((g,gi)=>g.pids.forEach((_,pos)=>(pos<adv?main:cons).push({pid:null,g:gi,gid:g.id,pos})));
+  S.koRounds=buildBracket(main,'main');S.koWinner=null;
+  if(S.settings.consolation&&cons.length>=2)S.consRounds=buildBracket(cons,'cons');
+  logEv('הוכן עץ הנוקאאוט מראש','ko');S.tab='bracket';commit();autoDistribute();
+}
+// ממלא את הסיבוב הראשון לפי הבתים שנגמרו. דטרמיניסטי, אז כמה מכשירים מגיעים לאותה תוצאה. משחק שכבר התחיל לא משתנה
+function koSync(){
+  if(!koPlanned())return;
+  const ord={};const who=x=>!x||!groupDone(x.gid)?null:((ord[x.gid]=ord[x.gid]||rankGroup(x.gid).order)[x.pos]||null);
+  for(const m of S.matches){if(m.stage!=='ko'||!(m.src1||m.src2))continue;
+    const a=m.src1?who(m.src1):m.p1,b=m.src2?who(m.src2):m.p2;
+    if(a===m.p1&&b===m.p2)continue;
+    if(m.status==='playing'||(m.status==='done'&&!m.bye))continue;
+    if(m.status==='done'){if(koHasDownstream(m))continue;resetDownstream(m);Object.assign(m,{status:'pending',winner:null,bye:false})}
+    m.p1=a;m.p2=b;
+    if((a&&m.bye2)||(b&&m.bye1)){m.status='done';m.winner=a||b;m.bye=true;advanceKO(m)}}
+  if(!S.koBuilt&&allGroupsDone()){S.koBuilt=true;logEv('הבתים הסתיימו, כל העץ מלא','ko')}
 }
 function buildBracket(entrants,bracket){
   if(entrants.length<2)return 0;
@@ -1586,7 +1611,7 @@ function buildBracket(entrants,bracket){
         if(w>=0&&(w<size/2)!==half)score+=10;// opposite half from own group's higher finisher
         const opp=trial[i^1];if(opp&&opp.pos===e.pos)score-=3;// avoid same-tier in round 1
         if(opp&&opp.g===e.g)score-=20;// never same group in round 1
-        if(opp&&P(opp.pid).club&&P(opp.pid).club===P(e.pid).club)score-=2;
+        if(opp&&opp.pid&&e.pid&&P(opp.pid).club&&P(opp.pid).club===P(e.pid).club)score-=2;
       }
       if(score>bestScore){bestScore=score;best=trial}
       if(score>=10*list.length)break;
@@ -1597,13 +1622,14 @@ function buildBracket(entrants,bracket){
   const ms=[];
   for(let r=0;r<rounds;r++){const n=size/Math.pow(2,r+1);for(let i=0;i<n;i++)ms.push(newMatch({stage:'ko',bracket,koRound:r,koIndex:i,p1:null,p2:null}))}
   const at=(r,i)=>ms.find(m=>m.koRound===r&&m.koIndex===i);
-  for(let i=0;i<size;i+=2){const m=at(0,i/2);m.p1=posOf[i]?posOf[i].pid:null;m.p2=posOf[i+1]?posOf[i+1].pid:null;m.bye1=!posOf[i];m.bye2=!posOf[i+1]}
+  for(let i=0;i<size;i+=2){const m=at(0,i/2);m.p1=posOf[i]?posOf[i].pid:null;m.p2=posOf[i+1]?posOf[i+1].pid:null;m.bye1=!posOf[i];m.bye2=!posOf[i+1];
+    if(posOf[i]&&posOf[i].gid)m.src1={gid:posOf[i].gid,pos:posOf[i].pos};if(posOf[i+1]&&posOf[i+1].gid)m.src2={gid:posOf[i+1].gid,pos:posOf[i+1].pos}}
   S.matches.push(...ms);
   if(S.settings.third&&bracket==='main'&&rounds>=2)S.matches.push(newMatch({stage:'ko',bracket,koRound:rounds-1,koIndex:1,third:true,p1:null,p2:null}));
   if(bracket==='main')S.koRounds=rounds;else S.consRounds=rounds;
   if(isPlace(bracket)){S.brRounds={};mkPlace(0,size)}
   // resolve byes
-  ms.filter(m=>m.koRound===0).forEach(m=>{if(m.p1&&!m.p2){m.status='done';m.winner=m.p1;m.bye=true;advanceKO(m)}else if(m.p2&&!m.p1){m.status='done';m.winner=m.p2;m.bye=true;advanceKO(m)}else if(!m.p1&&!m.p2){m.status='done';m.bye=true;if(isPlace(bracket))advanceKO(m)}});
+  ms.filter(m=>m.koRound===0).forEach(m=>{if(m.p1&&m.bye2){m.status='done';m.winner=m.p1;m.bye=true;advanceKO(m)}else if(m.p2&&m.bye1){m.status='done';m.winner=m.p2;m.bye=true;advanceKO(m)}else if(m.bye1&&m.bye2){m.status='done';m.bye=true;if(isPlace(bracket))advanceKO(m)}});
   return rounds;
 }
 function buildSwissKO(){
@@ -1659,19 +1685,19 @@ function koRoundName(m){const rounds=roundsOf(m.bracket);if(m.third)return 'מק
   if(m.bracket==='cons'&&S.settings.consPlace&&left===1)return 'גמר (מקום 1)';return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':left===4?'שמינית גמר':`סיבוב ${Math.pow(2,left)}`}
 function koFinished(){if(S.koWinner&&!S.matches.some(m=>m.stage==='ko'&&m.bracket==='main'))return true;const ko=S.matches.filter(m=>m.stage==='ko');return ko.length>0&&ko.every(m=>m.status==='done')}
 function bracketTab(){
-  if(!S.koBuilt)return koPreview();
+  if(!S.matches.some(m=>m.stage==='ko'))return koPreview();
   const draw=(bracket,rounds,title)=>{const ms=S.matches.filter(m=>m.stage==='ko'&&m.bracket===bracket);if(!ms.length)return '';
     return `<h2 style="margin:6px 0 8px">${title}</h2><div class="bracket">${Array.from({length:rounds},(_,r)=>`<div class="round"><h4>${koRoundName({bracket,koRound:r})}</h4>${ms.filter(m=>m.koRound===r&&!m.third).sort((a,b)=>a.koIndex-b.koIndex).map(m=>bm(m)).join('')}</div>`).join('')}
     ${S.settings.third&&bracket==='main'?`<div class="round"><h4>מקום 3</h4>${ms.filter(m=>m.third).map(bm).join('')}</div>`:''}</div>`};
-  const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
-    return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
+  const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc,src)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):src?`<span class="tiny">מקום ${src.pos+1} · ${esc(G(src.gid)?.name||'')}</span>`:'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
+    return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a,m.src1)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b,m.src2)}</div>`};
   const subs=Object.keys(S.brRounds||{}).filter(b=>isPlace(b)&&S.matches.some(m=>m.bracket===b&&(m.p1||m.p2))).sort((a,b)=>pBase(a)-pBase(b));
   return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'נוקאאוט תחתון'):'')+subs.map(b=>draw(b,roundsOf(b),`נוקאאוט תחתון · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
 }
 // לפני שהבתים נגמרים: מי בדרך לנוקאאוט העליון ומי לתחתון, לפי המצב הנוכחי בטבלאות
 function koPreview(){const adv=S.settings.advance;
   const rows=S.groups.map(g=>{const o=rankGroup(g.id).order;return `<div class="card" style="margin-bottom:10px"><h3 style="margin:0 0 6px">${esc(g.name)} <span class="tiny">${Math.round(groupProgress(g.id)*100)}% שוחק</span></h3>${o.map((id,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${i+1}. ${esc(pname(id))}</span><span class="tiny">${i<adv?'נוקאאוט עליון':S.settings.consolation?'נוקאאוט תחתון':''}</span></div>`).join('')}</div>`}).join('');
-  return `<div class="warn-box" style="margin-bottom:12px">העץ נבנה כשכל הבתים מסתיימים: כפתור "בונים את עץ הנוקאאוט" מופיע למטה. עד אז, זה המצב לפי הטבלאות עכשיו.</div>${rows}`}
+  return `<div class="warn-box" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>אפשר להכין את העץ כבר עכשיו. כל בית שנגמר ישבץ את השחקנים שלו לבד, והמשחקים יעלו לשולחנות ברגע ששני השחקנים ידועים.</span>${S.matches.length?`<button class="primary" onclick="prepKO()">הכנת עץ הנוקאאוט עכשיו</button>`:''}</div>${rows}`}
 function logTab(){
   const days={};
   (S.log||[]).forEach(l=>{const d=new Date(l.t).toLocaleDateString('he-IL');(days[d]=days[d]||[]).push(l)});
