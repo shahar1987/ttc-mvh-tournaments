@@ -1,0 +1,33 @@
+הדבקה ידנית בקונסולת Firebase בלבד (לא לפרסם אוטומטית)
+==========================================================
+זה קטע חלקי שמתווסף בתוך הבלוק הקיים:
+  match /tournaments/{id} { ... }
+כלומר: מוסיפים את הבלוק הבא בתוך match /tournaments/{id} { ... }, מתחת לכלל הקיים.
+
+    match /players/{pid} {
+      allow read: if hasProfile();
+      allow create, update: if hasProfile()
+        && request.resource.data.get('name', '') is string;
+      allow delete: if hasPerm('competitions');
+    }
+
+    match /matches/{mid} {
+      allow read: if hasProfile();
+      allow create, update: if hasProfile();
+      allow delete: if hasPerm('competitions');
+    }
+
+    match /tables/{tn} {
+      allow read: if hasProfile();
+      allow create, update: if hasProfile();
+      allow delete: if hasPerm('competitions');
+    }
+
+    match /log/{lid} {
+      allow read: if hasProfile();
+      allow create: if hasProfile();
+      allow update, delete: if false;
+    }
+
+הערה: הכלל של ה-log מאפשר רק הוספה, כדי שאף מכשיר לא ימחק את היומן.
+הכללים של השדות יוחמרו בשלב הקוד, אחרי בדיקה עם נתוני דמה.
