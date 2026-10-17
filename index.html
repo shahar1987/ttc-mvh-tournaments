@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.20';
+const APP_VER='2026-10-17.21';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -945,7 +945,7 @@ function allGroupsDone(){return S.matches.some(m=>m.stage==='group')&&S.matches.
 /* ========================= ENGINE: scheduling ========================= */
 function busyPids(){const s=new Set();for(const m of S.matches)if(m.status==='playing')matchPids(m).forEach(id=>s.add(id));return s}
 function idleSince(pid){return S.lastPlayed[pid]||S.phaseStart||Date.now()}
-function pendingMatches(){return S.matches.filter(m=>m.status==='pending'&&sideIds(m,1).length&&sideIds(m,2).length&&(m.stage!=='ko'||S.koBuilt||S.koGo))}
+function pendingMatches(){return S.matches.filter(m=>m.status==='pending'&&sideIds(m,1).length&&sideIds(m,2).length&&(m.stage!=='ko'||isCons(m.bracket)||S.koBuilt||S.koGo))}
 function groupProgress(gid){const ms=S.matches.filter(m=>m.stage==='group'&&m.groupId===gid);return ms.length?ms.filter(m=>m.status==='done').length/ms.length:1}
 function priority(m,now){
   const why=[];let sc=0;
@@ -1106,7 +1106,7 @@ function dashTab(){
   const out=(S.out||[]).length;const active=S.players.length-out;
   const al=[];
   if(!S.koBuilt&&sys()==='groups-ko'&&allGroupsDone())al.push(`<div class="dash-alert go"><span>🏁 כל הבתים הסתיימו</span><button class="primary" onclick="buildKO()">בניית עץ הנוקאאוט</button></div>`);
-  if(!S.koBuilt&&!S.koGo&&!allGroupsDone()){const rk=S.matches.filter(m=>m.stage==='ko'&&m.status==='pending'&&m.p1&&m.p2).length;if(rk)al.push(`<div class="dash-alert go"><span>🏁 ${rk} משחקי נוקאאוט כבר מוכנים בעץ ומחכים לך</span><button class="primary" onclick="startKO()">מתחילים את הנוקאאוט</button></div>`)}
+  if(!S.koBuilt&&!S.koGo&&!allGroupsDone()){const rk=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='main'&&m.status==='pending'&&m.p1&&m.p2).length;if(rk)al.push(`<div class="dash-alert go"><span>🏁 ${rk} משחקי נוקאאוט עליון כבר מוכנים ומחכים לך</span><button class="primary" onclick="startKO()">מתחילים את הנוקאאוט העליון</button></div>`)}
   if(S.koBuilt&&koFinished())al.push(`<div class="dash-alert go"><span>🏆 כל המשחקים הסתיימו</span><button class="primary" onclick="goto('final')">לפודיום</button></div>`);
   if(stuck.length===1){const m=stuck[0];al.push(`<div class="dash-alert"><span>⏱ שולחן ${esc(m.table)}: ${esc(sideName(m,1))} – ${esc(sideName(m,2))} כבר ${mins(now-m.startedAt)} דק׳. אולי שכחו לדווח?</span><button onclick="openResult('${ja(m.id)}')">הזנת תוצאה</button></div>`)}
   else if(stuck.length)al.push(`<div class="dash-alert"><span>⏱ ${stuck.length} שולחנות בלי תוצאה כבר 17 דק׳ ומעלה. מה קורה שם? לחצו על שולחן להזנת תוצאה:</span><span class="row" style="gap:6px">${stuck.sort((a,b)=>a.table-b.table).map(m=>`<button onclick="openResult('${ja(m.id)}')">שולחן ${esc(m.table)}</button>`).join('')}</span></div>`);
@@ -1578,7 +1578,7 @@ function prepKO(){
   try{S.koRounds=buildBracket(main,'main');S.koWinner=null;if(S.settings.consolation&&cons.length>=2)S.consRounds=buildBracket(cons,'cons')}finally{Math.random=rnd}
 }
 // מתחילים את הנוקאאוט: מעכשיו משחקי העץ שמוכנים עולים לשולחנות
-function startKO(){if(!confirm('להתחיל את הנוקאאוט? משחקים שבהם שני השחקנים ידועים יעלו לשולחנות.'))return;S.koGo=true;logEv('הנוקאאוט התחיל','ko');commit();autoDistribute()}
+function startKO(){if(!confirm('להתחיל את הנוקאאוט העליון? משחקים שבהם שני השחקנים ידועים יעלו לשולחנות.'))return;S.koGo=true;logEv('הנוקאאוט התחיל','ko');commit();autoDistribute()}
 function koSync(){
   prepKO();if(!koPlanned())return;
   const ord={};const who=x=>!x||!groupDone(x.gid)?null:((ord[x.gid]=ord[x.gid]||rankGroup(x.gid).order)[x.pos]||null);
@@ -1695,7 +1695,7 @@ function bracketTab(){
   const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc,src)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):src?`<span class="tiny">מקום ${src.pos+1} · ${esc(G(src.gid)?.name||'')}</span>`:'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
     return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a,m.src1)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b,m.src2)}</div>`};
   const subs=Object.keys(S.brRounds||{}).filter(b=>isPlace(b)&&S.matches.some(m=>m.bracket===b&&(m.p1||m.p2))).sort((a,b)=>pBase(a)-pBase(b));
-  const head=!S.koBuilt&&!S.koGo?`<div class="warn-box" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>העץ מתמלא לבד כשבית נגמר. המשחקים בו יעלו לשולחנות רק אחרי שתלחצי "מתחילים".</span><button class="primary" onclick="startKO()">מתחילים את הנוקאאוט</button></div>`:'';
+  const head=!S.koBuilt&&!S.koGo?`<div class="warn-box" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>העץ מתמלא לבד כשבית נגמר. הנוקאאוט התחתון רץ לבד, והעליון יעלה לשולחנות אחרי שתלחצי "מתחילים".</span><button class="primary" onclick="startKO()">מתחילים את הנוקאאוט העליון</button></div>`:'';
   return head+draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'נוקאאוט תחתון'):'')+subs.map(b=>draw(b,roundsOf(b),`נוקאאוט תחתון · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
 }
 // לפני שהבתים נגמרים: מי בדרך לנוקאאוט העליון ומי לתחתון, לפי המצב הנוכחי בטבלאות
