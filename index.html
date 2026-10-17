@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.16';
+const APP_VER='2026-10-17.17';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1035,7 +1035,7 @@ function renderLive(app){
     <button onclick="shareSummary()">📤 שתף סיכום</button>
   </div>`;
   const bar=app.querySelector('.LIVEBAR');bar.classList.remove('LIVEBAR');if(!bar.querySelector('.primary'))bar.classList.add('static');
-  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){overdueToast();if(S.tab==='tables'||S.tab==='dash')document.getElementById('tabBody').innerHTML=(S.tab==='dash'?dashTab:tablesTab)()}else clearInterval(ticker)},30000);
+  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){overdueToast();if((S.tab==='tables'||S.tab==='dash')&&document.activeElement?.id!=='tSearch')document.getElementById('tabBody').innerHTML=(S.tab==='dash'?dashTab:tablesTab)()}else clearInterval(ticker)},30000);
 }
 function estimateFinish(){
   const sy=sys();const par=Math.max(1,S.tables.length);
@@ -1059,13 +1059,16 @@ function canFinish(){
   return S.koBuilt&&koFinished();
 }
 /* ---------- Player card ---------- */
-function playerSearch(q){
-  const out=document.getElementById('pSearchOut');if(!out)return;
-  q=(q||'').trim();if(q.length<2){out.innerHTML='';return}
+function playerHits(q){
+  q=(q||'').trim();if(q.length<2)return '';
   const hits=S.players.filter(p=>p.name.includes(q)).slice(0,4);
-  if(!hits.length){out.innerHTML='<div class="card muted" style="margin-bottom:10px">לא נמצא שחקן בשם הזה</div>';return}
-  out.innerHTML=hits.map(p=>playerCard(p.id)).join('');
+  if(!hits.length)return '<div class="card muted" style="margin-bottom:10px">לא נמצא שחקן בשם הזה</div>';
+  return hits.map(p=>playerCard(p.id)).join('');
 }
+function playerSearch(q){const out=document.getElementById('pSearchOut');if(out)out.innerHTML=playerHits(q)}
+// חיפוש ליד כפתור הפיזור; השאילתה נשמרת כדי לשרוד את הרענון של המסך
+let tSearchQ='';
+function tableSearch(q){tSearchQ=q;const out=document.getElementById('tSearchOut');if(out)out.innerHTML=playerHits(q)}
 function playerCard(pid){
   const ms=S.matches.filter(m=>matchPids(m).includes(pid));
   const now=ms.find(m=>m.status==='playing');
@@ -1138,9 +1141,11 @@ function tablesTab(){
     <div class="row">
       <button class="green big" ${freeCount?'':'disabled'} onclick="distributeClick()">פיזור לשולחנות פנויים</button>
       <label class="toggle ${S.settings.auto?'on':''}" onclick="S.settings.auto=!S.settings.auto;commit();if(S.settings.auto)autoDistribute()"><i></i> פיזור אוטומטי</label>
+      <input id="tSearch" placeholder="🔎 איפה השחקן? כתבו שם" value="${esc(tSearchQ)}" oninput="tableSearch(this.value)" style="max-width:260px">
     </div>
     <span class="tiny">${{group:'בית = שולחן',pool:'מחסנית משותפת',hybrid:'משולב'}[S.settings.model]}${groupPhase?'':' · בנוקאאוט כל השולחנות משותפים'}</span>
   </div>
+  <div id="tSearchOut">${playerHits(tSearchQ)}</div>
   <div class="live-grid"><div class="lg-main">
   <div class="tables">${(()=>{
     // משחקים שעלו ב-3 הדקות האחרונות קופצים לראש הרשימה (החדש ביותר ראשון), השאר לפי מספר שולחן
