@@ -472,7 +472,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.9';
+const APP_VER='2026-10-17.10';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -706,7 +706,7 @@ function renderPlayers(app){
     </details>
   </div>`}
   <div class="section-h"><h2>רשומים (${cnt})</h2>${cnt&&!locked?'<button class="ghost danger" onclick="if(confirm(\'למחוק את כל השחקנים?\')){S.players=[];S.groups=[];commit()}">מחק הכול</button>':''}</div>
-  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${esc(p.seed)}">מדורג ${esc(p.seed)}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${ja(p.id)}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="removePlayer('${ja(p.id)}')" title="הסרה">✕</button>`}</li>`).join('')}</ul>
+  <ul class="plist">${S.players.map((p,i)=>`<li><span class="tiny">${i+1}</span><span class="n">${esc(p.name)}</span><span class="club">${esc(p.club||'')}</span>${p.seed?`<span class="pill seed${esc(p.seed)}">מדורג ${esc(p.seed)}</span>`:''}${locked?'':`<button class="ghost" onclick="cycleSeed('${ja(p.id)}')" title="שנה דירוג">✎</button><button class="ghost danger" onclick="removePlayer('${ja(p.id)}')" title="הסרה">✕</button>`}${locked&&S.matches.length?((S.out||[]).includes(p.id)?'<span class="pill">יצא/ה מהתחרות</span>':`<button class="ghost danger" onclick="withdrawPlayer('${ja(p.id)}')">יצא/ה מהתחרות</button>`):''}</li>`).join('')}</ul>
   <div class="toolbar">
     <button class="ghost" onclick="goto('setup')">חזרה להגדרות</button>
     ${locked?`<button class="primary big" onclick="goto('live')">למסך המשחקים</button>`:
@@ -965,6 +965,7 @@ function candidatesFor(table){
 function startOn(table,m){table.matchId=m.id;m.table=table.n;m.status='playing';m.startedAt=Date.now();logEv(`${sideName(m,1)} – ${sideName(m,2)} לשולחן ${table.n}`)}
 function distribute(){
   if(sys()==='king')return kingFill();
+  if(autoOut())return 0;
   let n=0;for(const t of S.tables){if(t.matchId)continue;const c=candidatesFor(t);if(c.length){startOn(t,c[0].m);n++}}
   if(!n)n=maybeNextRound()?distribute():0;
   return n;
@@ -1199,6 +1200,10 @@ function saveResult(mid){
   finishMatch(m,a>need-1?m.p1:m.p2,sets,{wo:false,retired:null});
 }
 function walkover(mid,absent){const m=S.matches.find(x=>x.id===mid);if(!confirm(`${pname(absent)} לא הגיע/ה — ניצחון טכני ל${pname(absent===m.p1?m.p2:m.p1)}?`))return;if(m.status==='done'&&m.stage==='ko'&&koHasDownstream(m)){if(!confirm('המשחק הזה כבר קידם שחקן בעץ. לשנות בכל זאת? המשחקים הבאים יאופסו.'))return;resetDownstream(m)}const need=needSets(m);const w=absent===m.p1?m.p2:m.p1;const sets=[];for(let i=0;i<need;i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null})}
+// שחקן שיצא מהתחרות: כל משחק שלו (עכשיו ובהמשך העץ) נסגר כניצחון טכני ליריב
+function withdrawPlayer(pid){if(!confirm(`להוציא את ${pname(pid)} מהתחרות? כל המשחקים שנשארו לו/ה ייסגרו כניצחון טכני ליריב.`))return;S.out=[...(S.out||[]),pid];commit();if(!autoOut())autoDistribute();toast(`${pname(pid)} יצא/ה מהתחרות`)}
+function autoOut(){const out=S.out||[];if(!out.length)return false;const m=S.matches.find(x=>x.status!=='done'&&x.p1&&x.p2&&(out.includes(x.p1)||out.includes(x.p2)));if(!m)return false;
+  const absent=out.includes(m.p1)?m.p1:m.p2;const w=absent===m.p1?m.p2:m.p1;const sets=[];for(let i=0;i<needSets(m);i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null});return true}
 function retire(mid,who){const m=S.matches.find(x=>x.id===mid);const need=needSets(m);const w=who===m.p1?m.p2:m.p1;const sets=readSets(m).filter(s=>s&&validSet(s[0],s[1]));let a=0,b=0;for(const [x,y] of sets){if(x>y)a++;else b++}while((w===m.p1?a:b)<need){sets.push(w===m.p1?[11,0]:[0,11]);if(w===m.p1)a++;else b++}finishMatch(m,w,sets,{wo:false,retired:who})}
 function backToQueue(mid){const m=S.matches.find(x=>x.id===mid);const t=S.tables.find(x=>x.matchId===mid);if(t)t.matchId=null;
   if(m.stage==='king'){S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)];S.matches=S.matches.filter(x=>x.id!==mid);closeModal();commit();return}
