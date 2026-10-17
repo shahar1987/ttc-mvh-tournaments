@@ -801,7 +801,10 @@ function buildGroups(ng){
   }
   S.groups=groups;
 }
-function reshuffle(){buildGroups(S.groups.length);commit();toast('הוגרל מחדש — המדורגים במקומם')}
+// בתים נעולים: אי אפשר להזיז ילדים בטעות. נפתחים רק בלחיצה מכוונת, ותמיד נעולים אחרי שהמשחקים התחילו.
+function drawLocked(){return !!S.groupsLocked||S.matches.length>0}
+function lockMsg(){toast(S.matches.length?'המשחקים כבר התחילו. אי אפשר להזיז ילדים.':'הבתים נעולים. לחצו "🔒 הבתים נעולים" כדי לפתוח.')}
+function reshuffle(){if(drawLocked())return lockMsg();buildGroups(S.groups.length);commit();toast('הוגרל מחדש — המדורגים במקומם')}
 function clubWarnings(){
   const w=[];for(const g of S.groups){const seen={};for(const id of g.pids){const c=P(id).club;if(!c)continue;(seen[c]=seen[c]||[]).push(P(id).name)}for(const c in seen)if(seen[c].length>1)w.push(`${g.name}: ${seen[c].join(' ו-')} (${c})`)}return w;
 }
@@ -814,16 +817,16 @@ function renderDraw(app){
   <p class="muted">${S.groups.length} בתים · ${S.players.length} שחקנים · שיטת נחש ל-ITTF. אפשר לגרור שחקן לבית אחר (או ללחוץ עליו ואז על הבית).</p>
   ${w.length?`<div class="warn-box">שחקנים מאותו מועדון באותו בית: ${esc(w.join(' · '))}. אפשר לגרור כדי להפריד.</div>`:''}
   ${bad?'<div class="err-box">יש בית עם פחות מ-3 או יותר מ-6 שחקנים. תקנו לפני האישור.</div>':''}
-  ${S.matches.length?'<div class="warn-box">ההגרלה כבר אושרה והמשחקים רצים. זו תצוגה בלבד.</div>':''}
-  <div class="row" style="margin:12px 0;${S.matches.length?'display:none':''}">
+  ${S.matches.length?'<div class="warn-box">ההגרלה כבר אושרה והמשחקים רצים. זו תצוגה בלבד.</div>':`<div class="row" style="margin:12px 0"><button class="${S.groupsLocked?'primary':'ghost'}" onclick="if(!S.groupsLocked||confirm('לפתוח את הבתים לעריכה?')){S.groupsLocked=!S.groupsLocked;selPid=null;commit()}">${S.groupsLocked?'🔒 הבתים נעולים · לחצו לפתיחה':'🔓 הבתים פתוחים לעריכה · לחצו לנעילה'}</button></div>`}
+  <div class="row" style="margin:12px 0;${drawLocked()?'display:none':''}">
     <button onclick="reshuffle()">🔀 ערבב שוב (המדורגים נשארים)</button>
-    <button onclick="S.groups.push({id:uid(),name:'בית '+String.fromCharCode(65+S.groups.length),pids:[]});commit()">+ בית</button>
+    <button onclick="if(drawLocked())return lockMsg();S.groups.push({id:uid(),name:'בית '+String.fromCharCode(65+S.groups.length),pids:[]});commit()">+ בית</button>
     <button onclick="removeEmptyGroup()">− בית ריק</button>
   </div>
   <div class="groups">${S.groups.map(g=>`
     <div class="group" style="--gc:${gcolor(g.id)}" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="dropTo(event,'${ja(g.id)}')" onclick="if(selPid)moveTo(selPid,'${ja(g.id)}')">
       <header class="gh"><h3><i class="gdot"></i>${esc(g.name)}</h3><span class="tiny">${g.pids.length} שחקנים · ${g.pids.length*(g.pids.length-1)/2} משחקים</span></header>
-      <ul>${g.pids.map(id=>{const p=P(id);return `<li draggable="true" class="${selPid===id?'selected':''}" ondragstart="event.dataTransfer.setData('t','${ja(id)}')" onclick="event.stopPropagation();selPid=selPid==='${ja(id)}'?null:'${ja(id)}';render()"><span>${esc(p.name)} <span class="tiny">${esc(p.club||'')}</span></span>${p.seed?`<span class="pill seed${esc(p.seed)}">${esc(p.seed)}</span>`:''}</li>`}).join('')}</ul>
+      <ul>${g.pids.map(id=>{const p=P(id);return `<li draggable="${drawLocked()?'false':'true'}" class="${selPid===id?'selected':''}" ondragstart="event.dataTransfer.setData('t','${ja(id)}')" onclick="event.stopPropagation();if(drawLocked())return;selPid=selPid==='${ja(id)}'?null:'${ja(id)}';render()"><span>${esc(p.name)} <span class="tiny">${esc(p.club||'')}</span></span>${p.seed?`<span class="pill seed${esc(p.seed)}">${esc(p.seed)}</span>`:''}</li>`}).join('')}</ul>
     </div>`).join('')}</div>
   <div class="toolbar">
     <button class="ghost" onclick="goto('players')">חזרה לשחקנים</button>
@@ -831,8 +834,8 @@ function renderDraw(app){
   </div>`;
 }
 function dropTo(ev,gid){ev.preventDefault();const id=ev.dataTransfer.getData('t');moveTo(id,gid)}
-function moveTo(pid,gid){for(const g of S.groups)g.pids=g.pids.filter(x=>x!==pid);G(gid).pids.push(pid);selPid=null;commit()}
-function removeEmptyGroup(){const i=S.groups.findIndex(g=>!g.pids.length);if(i<0){toast('אין בית ריק. גררו את השחקנים החוצה קודם.');return}S.groups.splice(i,1);S.groups.forEach((g,j)=>g.name='בית '+String.fromCharCode(65+j));commit()}
+function moveTo(pid,gid){if(drawLocked()){selPid=null;render();return lockMsg()}for(const g of S.groups)g.pids=g.pids.filter(x=>x!==pid);G(gid).pids.push(pid);selPid=null;commit()}
+function removeEmptyGroup(){if(drawLocked())return lockMsg();const i=S.groups.findIndex(g=>!g.pids.length);if(i<0){toast('אין בית ריק. גררו את השחקנים החוצה קודם.');return}S.groups.splice(i,1);S.groups.forEach((g,j)=>g.name='בית '+String.fromCharCode(65+j));commit()}
 
 /* ---------- Group schedule (circle method, 1v2 last) ---------- */
 function groupSchedule(n){
