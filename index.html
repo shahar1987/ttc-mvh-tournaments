@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.23';
+const APP_VER='2026-10-17.24';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1074,7 +1074,7 @@ function playerStage(pid){
   if(!ko.length)return {txt:'שלב הבתים',fin:false};
   // בעץ התחתון המספרים יחסיים לתחתון; מוסיפים את מספר שחקני העליון כדי להציג מקום אמיתי
   const off=S.groups.reduce((a,g)=>a+Math.min(S.settings.advance,g.pids.length),0);
-  const lbl=m=>isCons(m.bracket)?'נוקאאוט תחתון · '+koRoundName(m).replace(/(מקומות |על מקום )(\d+)(?:-(\d+))?/,(_,w,a,b)=>w+(+a+off)+(b?'-'+(+b+off):'')):'נוקאאוט עליון · '+koRoundName(m);
+  const lbl=m=>isCons(m.bracket)?'נוקאאוט תחתון · '+koRoundName(m).replace(/(מקומות |על מקום )(\d+)(?:-(\d+))?/,(_,w,a,b)=>w+(+a+off)+(b?'-'+Math.min(+b+off,S.players.length):'')):'נוקאאוט עליון · '+koRoundName(m);
   const open=ko.find(m=>m.status!=='done');
   if(open)return {txt:lbl(open)+(open.status==='pending'&&!S.koBuilt&&!S.koGo?' (הנוקאאוט עוד לא התחיל)':''),fin:false};
   const last=ko.slice().sort((a,b)=>(a.endedAt||0)-(b.endedAt||0)).pop();
@@ -1110,6 +1110,19 @@ function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3
 const OVERDUE_MS=17*60000;const overdueSeen=new Set();
 function overdueToast(){const now=Date.now();const m=S.matches.find(x=>x.status==='playing'&&x.startedAt&&now-x.startedAt>OVERDUE_MS&&!overdueSeen.has(x.id));if(!m||document.querySelector('.modal-bg'))return;overdueSeen.add(m.id);
   toast(`⏱ שולחן ${m.table}: ${mins(now-m.startedAt)} דק׳ בלי תוצאה`,{label:'פתיחה',fn:()=>{hideToast();openResult(m.id)}})}
+// לוח הבקרה: מצב כל השחקנים — מי משחק איפה, באיזה שלב, מי ממשיך ומי סיים
+let dashPF='all',dashPOpen=false;
+function playersPanel(){if(sys()!=='groups-ko')return '';
+  const busy={};S.matches.forEach(m=>{if(m.status==='playing')matchPids(m).forEach(id=>busy[id]=m)});
+  const rows=S.players.map(p=>{const st=playerStage(p.id)||{txt:'',fin:false};const m=busy[p.id];
+    if(st.txt==='שלב הבתים'){const g=S.groups.find(g=>g.pids.includes(p.id));if(g)st.txt='שלב הבתים · '+g.name}
+    return {p,st,m,k:m?'play':st.fin?'fin':'cont'}});
+  const cnt=k=>rows.filter(r=>r.k===k).length,ord={play:0,cont:1,fin:2},pl=r=>parseInt(r.st.place)||999;
+  const list=rows.filter(r=>dashPF==='all'||r.k===dashPF).sort((a,b)=>ord[a.k]-ord[b.k]||(a.k==='play'?a.m.table-b.m.table:a.k==='fin'?pl(a)-pl(b):0)||a.p.name.localeCompare(b.p.name));
+  const chip=(k,l)=>`<button class="chip ${dashPF===k?'on':''}" onclick="dashPF='${k}';dashPOpen=true;render()">${l}</button>`;
+  return `<details class="card" style="margin:12px 0" ${dashPOpen?'open':''} ontoggle="dashPOpen=this.open"><summary style="cursor:pointer;font-weight:700;font-size:18px">👥 מצב השחקנים · ${cnt('play')} משחקים עכשיו · ${cnt('cont')} ממשיכים · ${cnt('fin')} סיימו</summary>
+  <div class="row" style="gap:6px;margin:10px 0">${chip('all','הכל')}${chip('play','משחקים עכשיו')}${chip('cont','ממשיכים')}${chip('fin','סיימו')}</div>
+  <div style="overflow-x:auto"><table class="st"><tr><th style="text-align:right">שם</th><th style="text-align:right">שלב</th><th style="text-align:right">איפה עכשיו</th></tr>${list.map(r=>`<tr><td class="name">${esc(r.p.name)}</td><td style="text-align:right">${esc(r.st.txt)}</td><td style="text-align:right">${r.m?`<b>שולחן ${esc(r.m.table)}</b> מול ${esc(sideName(r.m,sideIds(r.m,1).includes(r.p.id)?2:1))}`:r.st.fin?`<span style="color:var(--rubber)">סיים/ה${r.st.place?' · מקום '+esc(r.st.place):''}</span>`:'<span style="color:var(--ok)">ממשיך/ה · ממתין/ה למשחק</span>'}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">אין שחקנים ברשימה הזו</td></tr>'}</table></div></details>`}
 function dashTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
   const playing=S.matches.filter(m=>m.status==='playing');const pend=pendingMatches();
@@ -1138,6 +1151,7 @@ function dashTab(){
   return `<div class="dash-alerts" role="status" aria-live="polite">${al.join('')}</div>
   <div class="dash-kpis">${kpi(`${doneAll}/${allMs.length}`,'משחקים שהסתיימו')}${kpi(`${playing.length}/${S.tables.length}`,'שולחנות פעילים')}${kpi(pend.length,'משחקים בתור')}${kpi(avg?Math.round(avg/60000)+' דק׳':'—','משחק ממוצע')}${kpi(estimateFinish()||'—','סיום צפוי')}${kpi(active+(out?` <small class="tiny">(${out} יצאו)</small>`:''),'שחקנים בתחרות')}</div>
   ${prog}
+  ${playersPanel()}
   ${tablesTab()}
   <div class="row" style="margin-top:14px;flex-wrap:wrap">
     ${S.lastUndo?'<button onclick="undoLast()">↩ ביטול התוצאה האחרונה</button>':''}
