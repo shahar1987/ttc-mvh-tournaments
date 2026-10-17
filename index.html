@@ -532,9 +532,9 @@ function stepIndex(p){return steps().indexOf(p)}
 function goto(p){S.phase=p;commit();window.scrollTo(0,0)}
 function renderSteps(){
   const cur=stepIndex(S.phase);
-  const reach={setup:true,players:true,draw:S.groups.length>0,live:S.matches.length>0,ko:S.koBuilt,final:canFinish()};
+  const reach={setup:true,players:true,draw:S.groups.length>0,live:S.matches.length>0,ko:S.koBuilt||(sys()==='groups-ko'&&S.matches.length>0),final:canFinish()};
   const lbl=Object.assign({},STEP_NAMES,{live:SYSTEMS[sys()].live});
-  document.getElementById('steps').innerHTML=steps().map((k,i)=>`<button class="step ${i<cur?'done':''} ${i===cur?'active':''}" ${reach[k]?'':'disabled'} onclick="goto('${k}')">${lbl[k]}</button>`).join('');
+  document.getElementById('steps').innerHTML=steps().map((k,i)=>`<button class="step ${i<cur?'done':''} ${i===cur?'active':''}" ${reach[k]?'':'disabled'} onclick="${k==='ko'&&!S.koBuilt?"S.tab='bracket';":''}goto('${k}')">${lbl[k]}</button>`).join('');
   document.getElementById('hdrName').textContent=S.settings.name||CLUB_NAME;
 }
 
@@ -543,6 +543,7 @@ function render(){
   const app=document.getElementById('app');
   document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID));
   if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
+  if(VIEW){document.getElementById('steps').innerHTML='';document.getElementById('hdrName').textContent=S.settings.name||CLUB_NAME;return renderView(app)}
   if(!USER){document.getElementById('steps').innerHTML='';return renderLogin(app)}
   if(!PROFILE){document.getElementById('steps').innerHTML='';app.innerHTML='<div class="card login"><h2>אין הרשאה</h2><p class="muted">המשתמש הזה לא מוגדר במערכת הנוכחות של המועדון. בקשו משלום להוסיף אותו.</p><button onclick="FB.signOut()">יציאה</button></div>';return}
   if(!TID){document.getElementById('steps').innerHTML='';document.getElementById('hdrName').textContent=CLUB_NAME;return renderList(app)}
@@ -613,6 +614,8 @@ function renderSetup(app){
       <div class="hint" id="modelHint">${{group:'לכל בית שולחן קבוע. אם יש יותר שולחנות מבתים — בתים גדולים מקבלים שניים.',pool:'כל שולחן שמתפנה מושך את המשחק הדחוף ביותר: סיבוב נמוך, בית מפגר, מי שמחכה הכי הרבה.',hybrid:'נועלים שולחן לבית מתוך כרטיס השולחן. שולחנות לא נעולים משרתים את כולם.'}[s.model]}</div>
     </div>`:''}
   </div>
+  <div class="card stack" style="margin-top:14px"><label class="chip ${s.publicLink?'on':''}" title="קישור שכל מי שמקבל אותו רואה את המשחקים והתוצאות, בלי התחברות. שמות מופיעים כשם פרטי ואות."><input type="checkbox" ${s.publicLink?'checked':''} onchange="S.settings.publicLink=this.checked;commit()">קישור צפייה פתוח</label>
+    ${s.publicLink?`<div class="hint" style="word-break:break-all">${esc(viewLink())} <button onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">📋 העתקה</button></div>`:''}</div>
   <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמירה והמשך לשחקנים</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><button class="ghost" onclick="pasteRestore()">📋 שחזור מטקסט</button><input type="file" id="importFile" accept=".json,application/json,text/plain" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button>${canDelete()?'<button class="ghost danger" onclick="deleteTournament()">מחיקת התחרות</button>':''}</div>`;
 }
 function setFmt(v){S.settings.format=v;commit()}
@@ -811,7 +814,8 @@ function renderDraw(app){
   <p class="muted">${S.groups.length} בתים · ${S.players.length} שחקנים · שיטת נחש ל-ITTF. אפשר לגרור שחקן לבית אחר (או ללחוץ עליו ואז על הבית).</p>
   ${w.length?`<div class="warn-box">שחקנים מאותו מועדון באותו בית: ${esc(w.join(' · '))}. אפשר לגרור כדי להפריד.</div>`:''}
   ${bad?'<div class="err-box">יש בית עם פחות מ-3 או יותר מ-6 שחקנים. תקנו לפני האישור.</div>':''}
-  <div class="row" style="margin:12px 0">
+  ${S.matches.length?'<div class="warn-box">ההגרלה כבר אושרה והמשחקים רצים. זו תצוגה בלבד.</div>':''}
+  <div class="row" style="margin:12px 0;${S.matches.length?'display:none':''}">
     <button onclick="reshuffle()">🔀 ערבב שוב (המדורגים נשארים)</button>
     <button onclick="S.groups.push({id:uid(),name:'בית '+String.fromCharCode(65+S.groups.length),pids:[]});commit()">+ בית</button>
     <button onclick="removeEmptyGroup()">− בית ריק</button>
@@ -823,7 +827,7 @@ function renderDraw(app){
     </div>`).join('')}</div>
   <div class="toolbar">
     <button class="ghost" onclick="goto('players')">חזרה לשחקנים</button>
-    <button class="primary big" ${bad?'disabled':''} onclick="confirmDraw()">אישור ההגרלה ופתיחת שולחנות</button>
+    ${S.matches.length?`<button class="primary big" onclick="goto('live')">חזרה למשחקים</button><button class="ghost" onclick="confirmDraw()">הגרלה מחדש</button>`:`<button class="primary big" ${bad?'disabled':''} onclick="confirmDraw()">אישור ההגרלה ופתיחת שולחנות</button>`}
   </div>`;
 }
 function dropTo(ev,gid){ev.preventDefault();const id=ev.dataTransfer.getData('t');moveTo(id,gid)}
@@ -990,9 +994,9 @@ function renderLive(app){
   <div class="row" style="margin-bottom:10px"><input id="pSearch" placeholder="🔎 חיפוש שחקן — מתי הוא משחק?" oninput="playerSearch(this.value)" style="max-width:340px"></div>
   <div id="pSearchOut"></div>
   <div class="tabs">
-    ${[['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt).map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
+    ${[['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt||sy==='groups-ko').map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
   </div>
-  <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'?tab:'tables']()}</div>
+  <div id="tabBody">${({tables:tablesTab,groups:standFn,bracket:bracketTab,log:logTab})[S.koBuilt||tab!=='bracket'||sy==='groups-ko'?tab:'tables']()}</div>
   <div class="toolbar LIVEBAR">
     ${!koPhase&&sy==='groups-ko'&&allGroupsDone()?`<button class="primary big" onclick="buildKO()">🏁 הבתים הסתיימו, בונים את עץ הנוקאאוט</button>`:''}
     ${!koPhase&&sy==='swiss'&&swissRoundsDone()>=S.settings.swissRounds&&ms.every(m=>m.status==='done')?(S.settings.swissKO?`<button class="primary big" onclick="buildSwissKO()">🏁 בניית נוקאאוט ל-${esc(S.settings.swissAdvance)} המובילים</button>`:`<button class="primary big" onclick="goto('final')">🏆 לפודיום</button>`):''}
@@ -1586,6 +1590,7 @@ function koRoundName(m){const rounds=roundsOf(m.bracket);if(m.third)return 'מק
   if(m.bracket==='cons'&&S.settings.consPlace&&left===1)return 'גמר (מקום 1)';return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`}
 function koFinished(){if(S.koWinner&&!S.matches.some(m=>m.stage==='ko'&&m.bracket==='main'))return true;const ko=S.matches.filter(m=>m.stage==='ko');return ko.length>0&&ko.every(m=>m.status==='done')}
 function bracketTab(){
+  if(!S.koBuilt)return koPreview();
   const draw=(bracket,rounds,title)=>{const ms=S.matches.filter(m=>m.stage==='ko'&&m.bracket===bracket);if(!ms.length)return '';
     return `<h2 style="margin:6px 0 8px">${title}</h2><div class="bracket">${Array.from({length:rounds},(_,r)=>`<div class="round"><h4>${koRoundName({bracket,koRound:r})}</h4>${ms.filter(m=>m.koRound===r&&!m.third).sort((a,b)=>a.koIndex-b.koIndex).map(m=>bm(m)).join('')}</div>`).join('')}
     ${S.settings.third&&bracket==='main'?`<div class="round"><h4>מקום 3</h4>${ms.filter(m=>m.third).map(bm).join('')}</div>`:''}</div>`};
@@ -1594,6 +1599,10 @@ function bracketTab(){
   const subs=Object.keys(S.brRounds||{}).filter(b=>isPlace(b)&&S.matches.some(m=>m.bracket===b&&(m.p1||m.p2))).sort((a,b)=>pBase(a)-pBase(b));
   return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'נוקאאוט תחתון'):'')+subs.map(b=>draw(b,roundsOf(b),`נוקאאוט תחתון · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
 }
+// לפני שהבתים נגמרים: מי בדרך לנוקאאוט העליון ומי לתחתון, לפי המצב הנוכחי בטבלאות
+function koPreview(){const adv=S.settings.advance;
+  const rows=S.groups.map(g=>{const o=rankGroup(g.id).order;return `<div class="card" style="margin-bottom:10px"><h3 style="margin:0 0 6px">${esc(g.name)} <span class="tiny">${Math.round(groupProgress(g.id)*100)}% שוחק</span></h3>${o.map((id,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>${i+1}. ${esc(pname(id))}</span><span class="tiny">${i<adv?'נוקאאוט עליון':S.settings.consolation?'נוקאאוט תחתון':''}</span></div>`).join('')}</div>`}).join('');
+  return `<div class="warn-box" style="margin-bottom:12px">העץ נבנה כשכל הבתים מסתיימים: כפתור "בונים את עץ הנוקאאוט" מופיע למטה. עד אז, זה המצב לפי הטבלאות עכשיו.</div>${rows}`}
 function logTab(){
   const days={};
   (S.log||[]).forEach(l=>{const d=new Date(l.t).toLocaleDateString('he-IL');(days[d]=days[d]||[]).push(l)});
@@ -1687,6 +1696,8 @@ function resetAll(){if(!confirm('לאפס את כל הנתונים של התחר
 let USER=null,PROFILE=null,TID=null,unsubT=null,unsubList=null,LIST=[],cloudT=null;
 const CLIENT=uid();
 window.addEventListener('fb-ready',()=>{
+  if(VIEW){FB.onSnapshot(FB.doc(FB.db,'tournamentsPublic',VIEW),snap=>{if(!snap.exists()||!snap.data().state){document.getElementById('app').innerHTML='<div class="card login"><h2>הקישור לא פעיל</h2><p class="muted">התחרות לא פתוחה לצפייה כרגע.</p></div>';return}
+      try{S=Object.assign(fresh(),JSON.parse(snap.data().state));render()}catch(e){console.error(e)}},e=>{console.error(e);document.getElementById('app').innerHTML='<div class="card login"><h2>אין גישה</h2></div>'});return}
   FB.onAuthStateChanged(FB.auth,async u=>{USER=u;PROFILE=null;
     if(u){try{const d=await FB.getDoc(FB.doc(FB.db,'users',u.uid));PROFILE=d.exists()?d.data():null}catch(e){PROFILE=null}}
     if(unsubList){unsubList();unsubList=null}
@@ -1787,6 +1798,7 @@ function pushCloud(force){
   setSync('saving');
   const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
+  if(S.settings.publicLink)body.publicLink=true;
   const tid=TID;const queued=pushQ.get(tid);
   if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;return queued.p}
   const job={tid,body};pushQ.set(tid,job);
@@ -1816,7 +1828,9 @@ async function pushOnce(job){
     }
     const b=res&&res.stale!=null?res.stale:rev;const cur=baseFor(tid);
     if(cur==null||b>cur)setBase(tid,b);
-    retryN=0;syncErr=null;if(!pushQ.size&&!cloudT)setSync('saved');return true;
+    retryN=0;syncErr=null;if(!pushQ.size&&!cloudT)setSync('saved');
+    if(body.publicLink)FB.setDoc(FB.doc(FB.db,'tournamentsPublic',tid),{name:body.name,phase:body.phase,updatedAt:body.updatedAt,state:JSON.stringify(publicState(JSON.parse(body.state)))}).catch(e=>console.error('public',e));
+    return true;
   }catch(e){
     console.error('pushCloud',e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('לא נשמר בענן. הנתונים בטוחים במכשיר.',{label:'בדיקה',fn:diagnostics})}
@@ -1891,6 +1905,18 @@ async function importFromClub(){
 function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled)').forEach(c=>{if(S.players.some(p=>p.name===c.dataset.name))return;S.players.push({id:uid(),name:c.dataset.name,club:c.dataset.club,seed:0,clubPlayerId:c.value});n++});closeModal();commit();toast(`נוספו ${n} שחקנים`)}
 
 /* ========================= PUBLIC DISPLAY ========================= */
+/* ---------- קישור צפייה פתוח: עותק מקוצר של התחרות, בלי התחברות ---------- */
+const VIEW=new URLSearchParams(location.search).get('view');
+function viewLink(){return location.origin+location.pathname+'?view='+TID}
+// שם פרטי ואות של שם המשפחה, ובלי היומן (שמות מלאים בטקסט חופשי)
+function publicState(st){st.players=(st.players||[]).map(p=>{const w=String(p.name||'').trim().split(/\s+/);return Object.assign({},p,{name:w.length>1?w[0]+' '+w[w.length-1][0]+'.':w[0]||''})});st.log=[];return st}
+function renderView(app){
+  const done=canFinish();const r=done?finalRanking():[];
+  const pod=done?`<div class="podium"><div class="pod p2"><div class="name">${esc(r[1]?.p.name||'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${esc(r[0]?.p.name||'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${esc(r[2]?.p.name||'')}</div><div class="block">3</div></div></div>`:'';
+  const secs=(done?['table','results']:['now','next','table','results']).map(sc=>`<div class="card" style="margin-bottom:14px">${pubBody(sc)}</div>`).join('');
+  const html=`<h1>${esc(S.settings.name)||'תן לי שולחן'}</h1><div class="tiny" style="margin-bottom:12px">${esc(S.settings.date)} · ${done?'התחרות הסתיימה':'מתעדכן אוטומטית'}</div>${pod}${secs}${S.koBuilt?`<div class="card">${bracketTab()}</div>`:''}`;
+  app.innerHTML=html.replace(/ onclick="[^"]*"/g,'');
+}
 let pubTimer=null;
 let pubScreen=0;
 const PUB_SCREENS=['now','next','table','results'];
@@ -1907,7 +1933,14 @@ function pubDraw(){
   const done=canFinish();
   let screens=done?['podium','table','results']:PUB_SCREENS;
   const sc=screens[pubScreen%screens.length];
+  const body=pubBody(sc);
   const head=`<h1><span>${esc(S.settings.name)||'תן לי שולחן'}</span><span style="font-size:18px;opacity:.6">${screens.map((x,i)=>i===pubScreen%screens.length?'●':'○').join(' ')}</span><button class="ghost" style="color:#fff;font-size:16px" onclick="closePublic()">✕ סגור</button></h1>`;
+  el.innerHTML=`<div class="public">${head}${body}</div>`;
+}
+function pubBody(sc){
+  const now=Date.now();const busy=busyPids();
+  const q=pendingMatches().filter(m=>!matchPids(m).some(id=>busy.has(id))).map(m=>({m,...priority(m,now)}));
+  q.forEach(x=>delete x.m._rest);q.sort((a,b)=>b.sc-a.sc);
   let body='';
   if(sc==='now'){
     body=`<div class="tables">${S.tables.map(t=>{const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
@@ -1930,7 +1963,7 @@ function pubDraw(){
     const r=finalRanking();
     body=`<div class="podium" style="min-height:300px"><div class="pod p2"><div class="name" style="color:#fff">${esc(r[1]?r[1].p.name:'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name" style="color:#fff">${esc(r[0]?r[0].p.name:'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name" style="color:#fff">${esc(r[2]?r[2].p.name:'')}</div><div class="block">3</div></div></div>`;
   }
-  el.innerHTML=`<div class="public">${head}${body}</div>`;
+  return body;
 }
 function closePublic(){clearInterval(pubTimer);document.getElementById('public').innerHTML='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 
