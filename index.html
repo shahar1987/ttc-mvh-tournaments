@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.14';
+const APP_VER='2026-10-17.15';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1077,7 +1077,7 @@ function playerCard(pid){
   else if(isTeamSys()){const st=amStandings();const me=st.find(x=>x.id===pid);pos=`מקום ${st.indexOf(me)+1} · ${me?me.pts:0} נקודות`}
   else pos=`${(S.kingCrowns||{})[pid]||0} ניצחונות`;
   return `<div class="card" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><h3>${esc(pname(pid))}</h3><span class="pill">${esc(pos)}</span></div>
-  <div style="margin-top:8px">${now?`<b style="color:var(--table)">משחק/ת עכשיו — שולחן ${esc(now.table)}</b> מול ${esc(sideName(now,sideIds(now,1).includes(pid)?2:1))}`:
+  <div style="margin-top:8px">${now?`<b style="color:var(--table)">משחק/ת עכשיו — שולחן ${esc(now.table)}</b> מול ${esc(sideName(now,sideIds(now,1).includes(pid)?2:1))} <button class="primary" style="margin-inline-start:8px" onclick="openResult('${ja(now.id)}')">פתיחת המשחק</button>`:
     nextQ?`הבא בתור: מול ${esc(sideName(nextQ.m,sideIds(nextQ.m,1).includes(pid)?2:1))} <span class="tiny">(${esc(matchLabel(nextQ.m))})</span>`:'<span class="muted">אין משחק ממתין כרגע</span>'}</div>
   ${dn.length?`<ul class="matchlist">${dn.slice(-6).map(m=>`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><span class="sc">${esc(m.score?m.score.join(':'):setsWon(m).join(':'))}</span></li>`).join('')}</ul>`:''}</div>`;
 }
