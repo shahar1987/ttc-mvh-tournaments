@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.11';
+const APP_VER='2026-10-17.12';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1197,8 +1197,10 @@ function openResult(mid){
   const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input',e=>{inp.value=inp.value.replace(/\D/g,'').slice(0,2);const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
-      if(v!==null&&v>=0){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov!==null&&ov<v&&v<=10))other.value=otherScore(v);}
-      if(v===null)other.value='';
+      // הצד השני שמולא אוטומטית מתעדכן עם כל ספרה (הקלדת 13 אחרי 1: מ-11 ל-15); צד שהוקלד ידנית לא נדרס
+      inp.dataset.auto='0';
+      if(v!==null&&v>=0){const ov=other.value===''?null:+other.value;if(ov===null||other.dataset.auto==='1'||!validSet(v,ov)||(ov!==null&&ov<v&&v<=10)){other.value=otherScore(v);other.dataset.auto='1'}}
+      if(v===null&&other.dataset.auto!=='0')other.value='';
       refreshSets(m);
       // אחרי מספר שלם (כל דבר חוץ מ-1, שיכול להיות 10, 11...) עוברים למערכה הבאה
       if(e.isTrusted!==false&&inp.value!==''&&(inp.value.length===2||inp.value!=='1')){const n=document.getElementById('a'+(i+1));if(n&&!n.disabled)n.focus();else document.getElementById('saveRes').focus()}});
