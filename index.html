@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.13';
+const APP_VER='2026-10-17.14';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1138,7 +1138,10 @@ function tablesTab(){
     <span class="tiny">${{group:'בית = שולחן',pool:'מחסנית משותפת',hybrid:'משולב'}[S.settings.model]}${groupPhase?'':' · בנוקאאוט כל השולחנות משותפים'}</span>
   </div>
   <div class="live-grid"><div class="lg-main">
-  <div class="tables">${S.tables.map(t=>{
+  <div class="tables">${(()=>{
+    // משחקים שעלו ב-3 הדקות האחרונות קופצים לראש הרשימה (החדש ביותר ראשון), השאר לפי מספר שולחן
+    const st=t=>{const m=t.matchId&&S.matches.find(x=>x.id===t.matchId);return m&&m.startedAt&&now-m.startedAt<3*60000?m.startedAt:0};
+    return S.tables.slice().sort((a,b)=>(st(b)-st(a))||(a.n-b.n))})().map(t=>{
     const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
     if(!m)return `<div class="table free" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="this.classList.remove('drop');dropMatch(event,${Number(t.n)})">
       <div class="tnum"><span>שולחן ${esc(t.n)}</span>${groupPhase&&S.settings.model!=='pool'?`<button class="lock" onclick="lockTable(${Number(t.n)})">${t.lock?esc(G(t.lock)?.name||''):'🔓 פתוח לכולם'}</button>`:''}</div>
