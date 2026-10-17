@@ -466,6 +466,10 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 <script>
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
+// עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
+const APP_VER='2026-10-17.7';
+function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
+setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
 const GROUP_COLORS=['#2E7D6B','#3B5A7F','#B24B41','#6B5B95','#9A6B18','#2F7F86','#9A4F76','#5B7340','#4E6E95','#7A6450'];
 const DEF={
@@ -1146,7 +1150,8 @@ function openResult(mid){
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const i=+inp.dataset.i;const nxt=document.getElementById('a'+(i+1));if(nxt&&!nxt.disabled)nxt.focus();else document.getElementById('saveRes').click()}});
   });
   refreshSets(m);
-  setTimeout(()=>{const f=[...box.querySelectorAll('input')].find(x=>!x.disabled&&x.value==='');(f||box.querySelector('input')).focus()},50);
+  // פוקוס מיד, בתוך הלחיצה על השולחן: באייפד המקלדת נפתחת רק כשהפוקוס קורה באותה לחיצה (לא אחרי setTimeout)
+  {const f=[...box.querySelectorAll('input')].find(x=>!x.disabled&&x.value==='');(f||box.querySelector('input')).focus({preventScroll:true})}
 }
 function readSets(m){const need=needSets(m);const bo=need*2-1;const sets=[];for(let i=0;i<bo;i++){const a=document.getElementById('a'+i),b=document.getElementById('b'+i);if(!a)break;if(a.value===''&&b.value==='')sets.push(null);else sets.push([+a.value,+b.value])}return sets}
 function refreshSets(m){
