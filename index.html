@@ -487,7 +487,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.15';
+const APP_VER='2026-10-17.16';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1035,7 +1035,7 @@ function renderLive(app){
     <button onclick="shareSummary()">📤 שתף סיכום</button>
   </div>`;
   const bar=app.querySelector('.LIVEBAR');bar.classList.remove('LIVEBAR');if(!bar.querySelector('.primary'))bar.classList.add('static');
-  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){if(S.tab==='tables'||S.tab==='dash')document.getElementById('tabBody').innerHTML=(S.tab==='dash'?dashTab:tablesTab)()}else clearInterval(ticker)},30000);
+  clearInterval(ticker);ticker=setInterval(()=>{if(S.phase==='live'||S.phase==='ko'){overdueToast();if(S.tab==='tables'||S.tab==='dash')document.getElementById('tabBody').innerHTML=(S.tab==='dash'?dashTab:tablesTab)()}else clearInterval(ticker)},30000);
 }
 function estimateFinish(){
   const sy=sys();const par=Math.max(1,S.tables.length);
@@ -1089,10 +1089,14 @@ function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n
   if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
   logEv('נוסף שחקן: '+n,'player');closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
+// משחק בלי תוצאה אחרי 17 דקות: השולחן מהבהב, התראה בלוח הבקרה, והודעה קטנה פעם אחת לכל משחק (בקשת שולה)
+const OVERDUE_MS=17*60000;const overdueSeen=new Set();
+function overdueToast(){const now=Date.now();const m=S.matches.find(x=>x.status==='playing'&&x.startedAt&&now-x.startedAt>OVERDUE_MS&&!overdueSeen.has(x.id));if(!m||document.querySelector('.modal-bg'))return;overdueSeen.add(m.id);
+  toast(`⏱ שולחן ${m.table}: ${mins(now-m.startedAt)} דק׳ בלי תוצאה`,{label:'פתיחה',fn:()=>{hideToast();openResult(m.id)}})}
 function dashTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
   const playing=S.matches.filter(m=>m.status==='playing');const pend=pendingMatches();
-  const stuck=playing.filter(m=>m.startedAt&&now-m.startedAt>avg*S.settings.stuckMult);
+  const stuck=playing.filter(m=>m.startedAt&&now-m.startedAt>OVERDUE_MS);
   const busy=busyPids();const free=S.tables.filter(t=>!t.matchId).length;
   const ready=pend.filter(m=>!matchPids(m).some(id=>busy.has(id)));
   const longWait=[...new Set(ready.flatMap(m=>matchPids(m)))].filter(id=>now-idleSince(id)>=20*60000);
@@ -1101,7 +1105,7 @@ function dashTab(){
   if(!S.koBuilt&&sys()==='groups-ko'&&allGroupsDone())al.push(`<div class="dash-alert go"><span>🏁 כל הבתים הסתיימו</span><button class="primary" onclick="buildKO()">בניית עץ הנוקאאוט</button></div>`);
   if(S.koBuilt&&koFinished())al.push(`<div class="dash-alert go"><span>🏆 כל המשחקים הסתיימו</span><button class="primary" onclick="goto('final')">לפודיום</button></div>`);
   if(stuck.length===1){const m=stuck[0];al.push(`<div class="dash-alert"><span>⏱ שולחן ${esc(m.table)}: ${esc(sideName(m,1))} – ${esc(sideName(m,2))} כבר ${mins(now-m.startedAt)} דק׳. אולי שכחו לדווח?</span><button onclick="openResult('${ja(m.id)}')">הזנת תוצאה</button></div>`)}
-  else if(stuck.length)al.push(`<div class="dash-alert"><span>⏱ ${stuck.length} שולחנות משחקים יותר מהרגיל. אולי שכחו לדווח? לחצו על שולחן להזנת תוצאה:</span><span class="row" style="gap:6px">${stuck.sort((a,b)=>a.table-b.table).map(m=>`<button onclick="openResult('${ja(m.id)}')">שולחן ${esc(m.table)}</button>`).join('')}</span></div>`);
+  else if(stuck.length)al.push(`<div class="dash-alert"><span>⏱ ${stuck.length} שולחנות בלי תוצאה כבר 17 דק׳ ומעלה. מה קורה שם? לחצו על שולחן להזנת תוצאה:</span><span class="row" style="gap:6px">${stuck.sort((a,b)=>a.table-b.table).map(m=>`<button onclick="openResult('${ja(m.id)}')">שולחן ${esc(m.table)}</button>`).join('')}</span></div>`);
   if(free&&ready.length)al.push(`<div class="dash-alert"><span>🟢 ${free} שולחנות פנויים ו-${ready.length} משחקים מוכנים</span><button class="green" onclick="distributeClick()">פיזור לשולחנות</button></div>`);
   if(longWait.length)al.push(`<div class="dash-alert"><span>⌛ מחכים יותר מ-20 דק׳: ${longWait.slice(0,6).map(id=>esc(pname(id))).join(', ')}${longWait.length>6?' ועוד '+(longWait.length-6):''}</span></div>`);
   if(!al.length)al.push(`<div class="dash-alert ok"><span>✅ הכל זורם. אין שולחן תקוע ואין משחק שמחכה לשולחן פנוי.</span></div>`);
@@ -1146,7 +1150,7 @@ function tablesTab(){
     if(!m)return `<div class="table free" ondragover="event.preventDefault();this.classList.add('drop')" ondragleave="this.classList.remove('drop')" ondrop="this.classList.remove('drop');dropMatch(event,${Number(t.n)})">
       <div class="tnum"><span>שולחן ${esc(t.n)}</span>${groupPhase&&S.settings.model!=='pool'?`<button class="lock" onclick="lockTable(${Number(t.n)})">${t.lock?esc(G(t.lock)?.name||''):'🔓 פתוח לכולם'}</button>`:''}</div>
       <div class="free-lbl">פנוי</div><div class="meta"><span>${t.lock&&groupPhase?'ממתין למשחק מ'+esc(G(t.lock)?.name||''):'גררו משחק לכאן'}</span></div></div>`;
-    const dur=now-m.startedAt;const stuck=dur>avg*S.settings.stuckMult;
+    const dur=now-m.startedAt;const stuck=dur>OVERDUE_MS;
     const fresh=dur<3*60000;
     return `<div class="table busy ${stuck?'stuck':''} ${fresh?'fresh':''}" onclick="openResult('${ja(m.id)}')">
       <div class="tnum"><span>שולחן ${esc(t.n)}</span><span>${esc(matchLabel(m))}</span></div>
