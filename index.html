@@ -234,6 +234,11 @@ main{max-width:1320px;margin:0 auto;padding:calc(var(--gut) + 4px) var(--gut) ca
 .table.busy{cursor:pointer}
 .table.busy:hover{transform:translateY(-3px);box-shadow:inset 0 0 0 3px rgba(255,255,255,.95),var(--shadow-2)}
 .table.stuck{animation:tableIn .3s var(--ease) both,alertPulse 1.9s 1.2s infinite}
+/* משחק שנכנס לשולחן ב-3 הדקות האחרונות: זוהר ושמות גדולים, כדי לקרוא לילדים */
+.table.fresh{animation:tableIn .3s var(--ease) both,freshGlow 1.4s infinite}
+.table.fresh .players{font-size:clamp(19px,1.6vw,24px)}
+.table .new-tag{position:relative;z-index:2;align-self:center;background:var(--ball);color:#fff;font-weight:700;font-size:.8em;padding:2px 10px;border-radius:999px}
+@keyframes freshGlow{0%,100%{box-shadow:inset 0 0 0 3px #ffd34d,0 0 10px 2px rgba(255,200,40,.55)}50%{box-shadow:inset 0 0 0 4px #ffe58a,0 0 26px 8px rgba(255,200,40,.85)}}
 @keyframes alertPulse{0%,100%{box-shadow:inset 0 0 0 3px rgba(255,255,255,.9),var(--shadow-1)}50%{box-shadow:inset 0 0 0 3px var(--ball),0 0 0 5px rgba(154,107,24,.3)}}
 .table .tnum{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:.76em;opacity:.85;font-weight:500}
 .table .tnum .lock{
@@ -467,7 +472,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.8';
+const APP_VER='2026-10-17.9';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1090,8 +1095,10 @@ function tablesTab(){
       <div class="tnum"><span>שולחן ${esc(t.n)}</span>${groupPhase&&S.settings.model!=='pool'?`<button class="lock" onclick="lockTable(${Number(t.n)})">${t.lock?esc(G(t.lock)?.name||''):'🔓 פתוח לכולם'}</button>`:''}</div>
       <div class="free-lbl">פנוי</div><div class="meta"><span>${t.lock&&groupPhase?'ממתין למשחק מ'+esc(G(t.lock)?.name||''):'גררו משחק לכאן'}</span></div></div>`;
     const dur=now-m.startedAt;const stuck=dur>avg*S.settings.stuckMult;
-    return `<div class="table busy ${stuck?'stuck':''}" onclick="openResult('${ja(m.id)}')">
+    const fresh=dur<3*60000;
+    return `<div class="table busy ${stuck?'stuck':''} ${fresh?'fresh':''}" onclick="openResult('${ja(m.id)}')">
       <div class="tnum"><span>שולחן ${esc(t.n)}</span><span>${esc(matchLabel(m))}</span></div>
+      ${fresh?'<span class="new-tag">חדש · לקרוא לשחקנים</span>':''}
       <div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div>
       <div class="meta"><span>${mins(dur)} דק׳${stuck?' · אולי שכחו לדווח?':''}</span><span>הזינו תוצאה</span></div></div>`}).join('')}</div>
   </div><aside class="lg-side">
