@@ -581,9 +581,9 @@ function renderSetup(app){
       <div><label>עולים מכל בית לנוקאאוט</label><select id="s_adv" ${locked?'disabled':''}>${[1,2].map(n=>`<option value="${n}" ${s.advance==n?'selected':''}>${n}</option>`).join('')}</select></div>
     </div>
     <div class="row">
-      <label class="chip ${s.consolation?'on':''}"><input type="checkbox" ${s.consolation?'checked':''} ${locked?'disabled':''} onchange="S.settings.consolation=this.checked;commit()">בית ניחומים לשאר השחקנים</label>
+      <label class="chip ${s.consolation?'on':''}"><input type="checkbox" ${s.consolation?'checked':''} ${locked?'disabled':''} onchange="S.settings.consolation=this.checked;commit()">נוקאאוט תחתון למי שלא עלה</label>
       <label class="chip ${s.third?'on':''}"><input type="checkbox" ${s.third?'checked':''} ${locked?'disabled':''} onchange="S.settings.third=this.checked;commit()">משחק על מקום 3</label>
-      ${s.consolation?`<label class="chip ${s.consPlace?'on':''}" title="מי שמפסיד בניחומים ממשיך לשחק על מקומות, כך שכל אחד מסיים עם מקום מדויק"><input type="checkbox" ${s.consPlace?'checked':''} ${S.koBuilt?'disabled':''} onchange="S.settings.consPlace=this.checked;commit()">דירוג מלא בניחומים</label>`:''}
+      ${s.consolation?`<label class="chip ${s.consPlace?'on':''}" title="מי שמפסיד בנוקאאוט התחתון ממשיך לשחק על מקומות, כך שכל אחד מסיים עם מקום מדויק"><input type="checkbox" ${s.consPlace?'checked':''} ${S.koBuilt?'disabled':''} onchange="S.settings.consPlace=this.checked;commit()">דירוג מלא בנוקאאוט התחתון</label>`:''}
     </div>`:''}
     ${s.system==='swiss'?`<div class="grid2">
       <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
@@ -610,7 +610,7 @@ function renderSetup(app){
       <div class="hint" id="modelHint">${{group:'לכל בית שולחן קבוע. אם יש יותר שולחנות מבתים — בתים גדולים מקבלים שניים.',pool:'כל שולחן שמתפנה מושך את המשחק הדחוף ביותר: סיבוב נמוך, בית מפגר, מי שמחכה הכי הרבה.',hybrid:'נועלים שולחן לבית מתוך כרטיס השולחן. שולחנות לא נעולים משרתים את כולם.'}[s.model]}</div>
     </div>`:''}
   </div>
-  <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמירה והמשך לשחקנים</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button>${canDelete()?'<button class="ghost danger" onclick="deleteTournament()">מחיקת התחרות</button>':''}</div>`;
+  <div class="toolbar"><button class="primary big" onclick="saveSetup()">שמירה והמשך לשחקנים</button><button class="ghost" onclick="exportJSON()">⬇ גיבוי</button><button class="ghost" onclick="document.getElementById('importFile').click()">⬆ שחזור מגיבוי</button><input type="file" id="importFile" accept=".json,application/json,text/plain" style="display:none" onchange="importJSON(this)"><button class="ghost danger" onclick="resetAll()">איפוס התחרות</button>${canDelete()?'<button class="ghost danger" onclick="deleteTournament()">מחיקת התחרות</button>':''}</div>`;
 }
 function setFmt(v){S.settings.format=v;commit()}
 function setSystem(v){const wasTeam=isTeamSys();S.settings.system=v;if(v!=='groups-ko')S.settings.model='pool';if(isTeamSys()||wasTeam)S.settings.format='singles';commit()}
@@ -928,7 +928,7 @@ function priority(m,now){
     const minRound=pend.length?Math.min(...pend.map(x=>x.round)):m.round;
     sc-=100*(m.round-minRound);why.push('סיבוב '+m.round);
   }else if(m.stage==='king'){why.push('מלך השולחן')}
-  else{sc-=100*m.koRound;why.push(isCons(m.bracket)?'ניחומים · '+koRoundName(m):'נוקאאוט'+' · '+koRoundName(m))}
+  else{sc-=100*m.koRound;why.push(isCons(m.bracket)?'נוקאאוט תחתון · '+koRoundName(m):'נוקאאוט'+' · '+koRoundName(m))}
   const pids=matchPids(m);
   const idle=Math.max(...pids.map(id=>now-idleSince(id)));sc+=2*mins(idle);
   const restMs=S.settings.restMin*60000;const lastEnd=Math.max(0,...pids.map(id=>S.lastPlayed[id]||0));
@@ -1096,7 +1096,7 @@ function matchLabel(m){
   if(m.stage==='swiss')return `סיבוב ${m.round}`;
   if(m.stage==='round')return `סיבוב ${m.round} · עד ${m.target||S.settings.target}`;
   if(m.stage==='king')return `מלך השולחן · עד ${m.target||S.settings.kingTarget}`;
-  return (isCons(m.bracket)?'ניחומים · ':'')+koRoundName(m);
+  return (isCons(m.bracket)?'נוקאאוט תחתון · ':'')+koRoundName(m);
 }
 function dropMatch(ev,tn){ev.preventDefault();const id=ev.dataTransfer.getData('m');const m=S.matches.find(x=>x.id===id);const t=S.tables.find(x=>x.n===tn);if(!m||!t||t.matchId||m.status!=='pending')return;const busy=busyPids();if(matchPids(m).some(x=>busy.has(x))){toast('אחד השחקנים משחק עכשיו');return}startOn(t,m);commit()}
 function lockTable(tn){
@@ -1577,7 +1577,7 @@ function bracketTab(){
   const bm=m=>{const [a,b]=setsWon(m);const line=(pid,bye,w,sc)=>`<div class="${w?'w':''}"><span class="${bye?'bye':''}">${bye?'Bye':pid?esc(pname(pid)):'…'}</span><span class="sc">${m.status==='done'&&!m.bye?sc:''}</span></div>`;
     return `<div class="bm ${m.status==='playing'?'live':''}" ${m.status!=='done'||!m.bye?`onclick="if('${ja(m.status)}'!=='pending')openResult('${ja(m.id)}')"`:''} style="${m.status==='playing'?'cursor:pointer':''}">${line(m.p1,m.bye1&&!m.p1,m.winner&&m.winner===m.p1,a)}${line(m.p2,m.bye2&&!m.p2,m.winner&&m.winner===m.p2,b)}</div>`};
   const subs=Object.keys(S.brRounds||{}).filter(b=>isPlace(b)&&S.matches.some(m=>m.bracket===b&&(m.p1||m.p2))).sort((a,b)=>pBase(a)-pBase(b));
-  return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'עץ ניחומים'):'')+subs.map(b=>draw(b,roundsOf(b),`ניחומים · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
+  return draw('main',S.koRounds,'עץ ראשי')+(S.consRounds?draw('cons',S.consRounds,'נוקאאוט תחתון'):'')+subs.map(b=>draw(b,roundsOf(b),`נוקאאוט תחתון · מקומות ${pBase(b)+1}-${pBase(b)+Math.pow(2,roundsOf(b))}`)).join('');
 }
 function logTab(){
   const days={};
