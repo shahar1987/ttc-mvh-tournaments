@@ -356,9 +356,6 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 .set input:focus{border-color:var(--act);box-shadow:0 0 0 4px rgba(59,90,127,.14)}
 .set input:disabled{background:var(--paper);color:var(--ink-3);border-color:var(--rule)}
 .set input.bad{border-color:var(--bad);background:#F8EAE8}
-.set input.act{border-color:var(--act);box-shadow:0 0 0 4px rgba(59,90,127,.25)}
-.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 4px;direction:ltr}
-.keypad button{min-height:54px;font-size:26px;font-weight:700;border-radius:12px;touch-action:manipulation}
 .set .x{text-align:center;color:var(--ink-3);font-size:.85em}
 .quick{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0}
 .quick button{font-size:.9em;padding:8px 13px;min-height:44px}
@@ -1125,9 +1122,8 @@ function openResult(mid){
   modal(`<h2>${esc(matchLabel(m))}${m.table?' · שולחן '+esc(m.table):''}</h2>
   <div class="names"><div>${esc(sideName(m,1))}<span class="setsw" id="swA">0</span></div><div></div><div>${esc(sideName(m,2))}<span class="setsw" id="swB">0</span></div></div>
   <div class="quick"><span class="tiny">מהיר:</span><button onclick="quickFill('${ja(mid)}',0)">${esc(sideName(m,1))} ${need}:0</button><button onclick="quickFill('${ja(mid)}',1)">${esc(sideName(m,2))} ${need}:0</button></div>
-  <div class="sets" id="sets">${cur.map((s,i)=>`<div class="set"><input type="text" inputmode="none" readonly id="a${i}" value="${esc(s[0])}" data-i="${i}" data-side="0" placeholder="–"><span class="x">${i+1}</span><input type="text" inputmode="none" readonly id="b${i}" value="${esc(s[1])}" data-i="${i}" data-side="1" placeholder="–"></div>`).join('')}</div>
-  <div class="keypad">${[1,2,3,4,5,6,7,8,9].map(d=>`<button type="button" onclick="keyIn('${d}')">${d}</button>`).join('')}<button type="button" onclick="keyIn('del')">⌫</button><button type="button" onclick="keyIn('0')">0</button><button type="button" class="ghost" onclick="keyIn('next')">הבא</button></div>
-  <div class="hint">לוחצים על משבצת ומקלידים את הנקודות של המפסיד. הצד השני מתמלא לבד (11, או הפרש 2 אחרי 10).</div>
+  <div class="sets" id="sets">${cur.map((s,i)=>`<div class="set"><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" id="a${i}" value="${esc(s[0])}" data-i="${i}" data-side="0" placeholder="–"><span class="x">${i+1}</span><input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" id="b${i}" value="${esc(s[1])}" data-i="${i}" data-side="1" placeholder="–"></div>`).join('')}</div>
+  <div class="hint">מקלידים את הנקודות של המפסיד. הצד השני מתמלא לבד (11, או הפרש 2 אחרי 10).</div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
   <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="saveResult('${ja(mid)}')">שמור ופנה שולחן</button>
     <button class="ghost" onclick="closeModal()">סגור</button></div>
@@ -1140,26 +1136,17 @@ function openResult(mid){
     </div></details>`);
   const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
-    inp.addEventListener('input',e=>{const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
+    inp.addEventListener('input',e=>{inp.value=inp.value.replace(/\D/g,'').slice(0,2);const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
       if(v!==null&&v>=0){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov!==null&&ov<v&&v<=10))other.value=otherScore(v);}
       if(v===null)other.value='';
-      refreshSets(m)});
-    inp.addEventListener('click',()=>setKeyCell(inp,true));
+      refreshSets(m);
+      // אחרי מספר שלם (כל דבר חוץ מ-1, שיכול להיות 10, 11...) עוברים למערכה הבאה
+      if(e.isTrusted!==false&&inp.value!==''&&(inp.value.length===2||inp.value!=='1')){const n=document.getElementById('a'+(i+1));if(n&&!n.disabled)n.focus();else document.getElementById('saveRes').focus()}});
+    inp.addEventListener('focus',()=>inp.select());
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const i=+inp.dataset.i;const nxt=document.getElementById('a'+(i+1));if(nxt&&!nxt.disabled)nxt.focus();else document.getElementById('saveRes').click()}});
   });
   refreshSets(m);
-  setKeyCell([...box.querySelectorAll('input')].find(x=>!x.disabled&&x.value==='')||box.querySelector('input'),true);
-}
-// מקלדת המספרים שבחלון: עובדת אותו דבר באייפד ובאנדרואיד, בלי המקלדת של המכשיר
-let keyCell=null,keyFresh=false;
-function setKeyCell(inp,fresh){document.querySelectorAll('#sets input.act').forEach(x=>x.classList.remove('act'));keyCell=inp&&!inp.disabled?inp:null;keyFresh=fresh;if(keyCell)keyCell.classList.add('act')}
-function keyIn(k){
-  if(!keyCell||keyCell.disabled)return;const i=+keyCell.dataset.i;
-  if(k==='next'){const n=document.getElementById('a'+(i+1));setKeyCell(n&&!n.disabled?n:null,true);return}
-  if(k==='del'){keyCell.value=keyFresh?'':keyCell.value.slice(0,-1);keyFresh=false}
-  else{keyCell.value=(keyFresh?'':keyCell.value)+k;if(keyCell.value.length>2)keyCell.value=keyCell.value.slice(-2);keyFresh=false}
-  keyCell.dispatchEvent(new Event('input'));
-  // אחרי מספר שלם (כל דבר חוץ מ-1, שיכול להיות 10, 11...) עוברים למערכה הבאה
-  if(k!=='del'&&(keyCell.value.length===2||keyCell.value!=='1')){const n=document.getElementById('a'+(i+1));setKeyCell(n&&!n.disabled?n:null,true)}
+  setTimeout(()=>{const f=[...box.querySelectorAll('input')].find(x=>!x.disabled&&x.value==='');(f||box.querySelector('input')).focus()},50);
 }
 function readSets(m){const need=needSets(m);const bo=need*2-1;const sets=[];for(let i=0;i<bo;i++){const a=document.getElementById('a'+i),b=document.getElementById('b'+i);if(!a)break;if(a.value===''&&b.value==='')sets.push(null);else sets.push([+a.value,+b.value])}return sets}
 function refreshSets(m){
