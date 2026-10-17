@@ -467,7 +467,7 @@ table.st tr.moved{animation:climb .55s var(--ease) both}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.7';
+const APP_VER='2026-10-17.8';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1581,8 +1581,8 @@ function resetDownstream(m){
   const t=S.tables.find(x=>x.matchId===nxt.id);if(t)t.matchId=null;nxt.status='pending';nxt.sets=[];nxt.winner=null;nxt.table=null;nxt.startedAt=null;
 }
 function koRoundName(m){const rounds=roundsOf(m.bracket);if(m.third)return 'מקום 3';const left=rounds-m.koRound;
-  if(m.bracket&&m.bracket.startsWith('cons:')){const b=pBase(m.bracket);return left===1?`על מקום ${b+1}`:`מקומות ${b+1}-${b+Math.pow(2,rounds)} · `+(left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`)}
-  if(m.bracket==='cons'&&S.settings.consPlace&&left===1)return 'גמר (מקום 1)';return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':`שמינית (${Math.pow(2,left)})`}
+  if(m.bracket&&m.bracket.startsWith('cons:')){const b=pBase(m.bracket);return left===1?`על מקום ${b+1}`:`מקומות ${b+1}-${b+Math.pow(2,rounds)} · `+(left===2?'חצי גמר':left===3?'רבע גמר':left===4?'שמינית גמר':`סיבוב ${Math.pow(2,left)}`)}
+  if(m.bracket==='cons'&&S.settings.consPlace&&left===1)return 'גמר (מקום 1)';return left===1?'גמר':left===2?'חצי גמר':left===3?'רבע גמר':left===4?'שמינית גמר':`סיבוב ${Math.pow(2,left)}`}
 function koFinished(){if(S.koWinner&&!S.matches.some(m=>m.stage==='ko'&&m.bracket==='main'))return true;const ko=S.matches.filter(m=>m.stage==='ko');return ko.length>0&&ko.every(m=>m.status==='done')}
 function bracketTab(){
   if(!S.koBuilt)return koPreview();
