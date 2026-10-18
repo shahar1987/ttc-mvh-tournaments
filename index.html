@@ -2071,10 +2071,11 @@ function pushCloud(force){
   setSync('saving');
   const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:progPhase(),playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
-  if(S.settings.publicLink)body.publicLink=true;
-  const tid=TID;const queued=pushQ.get(tid);
-  if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;return queued.p}
-  const job={tid,body};pushQ.set(tid,job);
+  body.publicLink=!!S.settings.publicLink;
+  // הגרסה שעליה התוכן מבוסס נלכדת יחד עם התוכן, ולא בזמן השליחה (אחרת התנגשות קודמת "מכשירה" תוכן ישן ודורסת מכשיר אחר)
+  const tid=TID;const queued=pushQ.get(tid);const base=baseFor(tid);
+  if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;queued.base=base;return queued.p}
+  const job={tid,body,base};pushQ.set(tid,job);
   job.p=pushChain.then(()=>{pushQ.delete(tid);return pushOnce(job)});
   pushChain=job.p.catch(()=>false);
   return job.p;
@@ -2088,7 +2089,7 @@ async function pushOnce(job){
     else{
       res=await FB.runTransaction(FB.db,async tx=>{
         const snap=await tx.get(ref);
-        if(snap.exists()){const d=snap.data();const rr=d.rev||0;
+        if(snap.exists()){const d=snap.data();const rr=d.rev||0;job.wasPublic=!!d.publicLink;
           // הגרסה בענן היא של המכשיר הזה וחדשה יותר ממה שבידינו — לא כותבים (זה היה מחזיר את הענן אחורה), ואין התנגשות.
           if(d.client===CLIENT&&rr>rev)return {stale:rr};
           // מותר לכתוב: אין עדיין מצב בענן, או שהגרסה בענן היא שלנו, או שלא נוספה גרסה אחרי זו שאנחנו מכירים.
@@ -2103,6 +2104,7 @@ async function pushOnce(job){
     if(cur==null||b>cur)setBase(tid,b);
     retryN=0;syncErr=null;if(tid===PENDING_NEW)PENDING_NEW=null;if(!pushQ.size&&!cloudT)setSync('saved');
     if(body.publicLink)FB.setDoc(FB.doc(FB.db,'tournamentsPublic',tid),{name:body.name,phase:body.phase,updatedAt:body.updatedAt,state:JSON.stringify(publicState(JSON.parse(body.state)))}).catch(e=>console.error('public',e));
+    else if(job.wasPublic)pubOff(tid);
     return true;
   }catch(e){
     console.error('pushCloud',e);syncErr=e;setSync('error');
@@ -2160,7 +2162,7 @@ async function diagnostics(){
   <div class="row" style="margin-top:16px"><button class="primary" onclick="closeModal();pushCloud().then(ok=>toast(ok?'נשמר בענן':'עדיין לא נשמר'))">נסה לשמור עכשיו</button>
   <button onclick="exportJSON()">הורדת גיבוי</button><button class="ghost" onclick="closeModal()">סגור</button></div>`);
 }
-async function deleteTournament(){const id=TID,name=S.settings.name||'ללא שם';if(!id)return;if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;clearTimeout(cloudT);cloudT=null;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));localStorage.removeItem(KEY+'.'+id);closeTournament(true);render();toast('התחרות נמחקה')}catch(e){toast('המחיקה נכשלה');scheduleCloud()}}
+async function deleteTournament(){const id=TID,name=S.settings.name||'ללא שם';if(!id)return;if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;clearTimeout(cloudT);cloudT=null;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));pubOff(id);localStorage.removeItem(KEY+'.'+id);localStorage.removeItem(KEY+'.last');closeTournament(true);render();toast('התחרות נמחקה')}catch(e){toast('המחיקה נכשלה');scheduleCloud()}}
 /* import players from attendance app */
 async function importFromClub(){
   modal('<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">טוען…</p>');
@@ -2182,7 +2184,11 @@ function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled
 const VIEW=new URLSearchParams(location.search).get('view');
 function viewLink(){return location.origin+location.pathname+'?view='+TID}
 // שם פרטי ואות של שם המשפחה, ובלי היומן (שמות מלאים בטקסט חופשי)
-function publicState(st){st.players=(st.players||[]).map(p=>{const w=String(p.name||'').trim().split(/\s+/);return Object.assign({},p,{name:w.length>1?w[0]+' '+w[w.length-1][0]+'.':w[0]||''})});st.log=[];return st}
+// בלי מועדון ובלי מזהה הילד באפליקציית הנוכחות. בזוג ("דני / יוסי") כל אחד מקוצר לחוד; שני שמות שיוצאים זהים מקבלים מספר
+function publicState(st){const short=n=>String(n||'').split('/').map(x=>{const w=x.trim().split(/\s+/);return w.length>1?w[0]+' '+w[w.length-1][0]+'.':w[0]||''}).join(' / ');const seen={};
+  st.players=(st.players||[]).map(p=>{let n=short(p.name);seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+=' ('+seen[n]+')';return {id:p.id,name:n}});st.log=[];st.lastUndo=null;return st}
+// מחיקת העותק הציבורי. מי שאין לו הרשאת מחיקה מרוקן אותו (הקישור מציג "לא פעיל")
+function pubOff(tid){if(!tid)return Promise.resolve();const ref=FB.doc(FB.db,'tournamentsPublic',tid);return FB.deleteDoc(ref).catch(()=>FB.setDoc(ref,{name:'',phase:'',state:'',updatedAt:Date.now()})).catch(e=>console.error('public off',e))}
 function renderView(app){
   const done=canFinish();const r=done?finalRanking():[];
   const pod=done?`<div class="podium"><div class="pod p2"><div class="name">${esc(r[1]?.p.name||'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${esc(r[0]?.p.name||'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${esc(r[2]?.p.name||'')}</div><div class="block">3</div></div></div>`:'';
