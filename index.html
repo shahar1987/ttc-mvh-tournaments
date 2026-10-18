@@ -529,7 +529,10 @@ let S=fresh();
 function fresh(){const o=JSON.parse(JSON.stringify(DEF));o.settings.date=todayIL();return o}
 // התאריך של היום לפי שעון ישראל (YYYY-MM-DD), מחושב מחדש בכל תחרות חדשה ולא פעם אחת בטעינה ב-UTC.
 function todayIL(){try{const p={};new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).forEach(x=>p[x.type]=x.value);if(p.year&&p.month&&p.day)return p.year+'-'+p.month+'-'+p.day}catch(e){}return new Date().toISOString().slice(0,10)}
-function save(){if(!TID)return;S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}scheduleCloud()}
+// הלשונית והמסך (tab, phase) של כל מכשיר לעצמו: שינוי רק שלהם נשמר במכשיר ולא נשלח לענן (אחרת כל המכשירים זזים איתו)
+let lastSig=null;
+function stSig(){return JSON.stringify(S,(k,v)=>k==='tab'||k==='phase'||k==='rev'?undefined:v)}
+function save(){if(!TID)return;const sig=stSig(),changed=sig!==lastSig;lastSig=sig;if(changed)S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}if(changed)scheduleCloud()}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function logEv(t,kind){
   S.log.unshift({t:Date.now(),m:t,by:(PROFILE&&PROFILE.name)||(USER&&USER.email)||'',k:kind||'',d:S.rev||0});
@@ -588,8 +591,8 @@ function renderSteps(){
 }
 
 /* ========================= RENDER ========================= */
-function render(){
-  if(S.phase==='setup')keepSetup();
+function render(remote){
+  if(S.phase==='setup'&&!remote)keepSetup();
   const app=document.getElementById('app');
   document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID));
   if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
@@ -1041,7 +1044,7 @@ function renderLive(app){
   const title=koPhase?'נוקאאוט':SYSTEMS[sy].live;
   const standTab=sy==='groups-ko'?['groups','טבלאות הבתים']:sy==='swiss'?['groups','טבלה']:isTeamSys()?['groups','טבלה אישית']:['groups','מלכים ותור'];
   const standFn=sy==='groups-ko'?groupsTab:sy==='swiss'?swissTab:isTeamSys()?amTab:kingTab;
-  app.innerHTML=`
+  app.innerHTML=`${conflictBanner()}
   <div class="live-top">
     <div><h1>${title}</h1><div class="tiny">${esc(S.settings.name)} · ${esc(S.settings.date)} · ${SYSTEMS[sy].n}</div></div>
     <div class="stat"><div><b>${done}${sy==='king'?'':'/'+total}</b><span>משחקים</span></div><div><b>${S.tables.filter(t=>t.matchId).length}/${S.tables.length}</b><span>שולחנות פעילים</span></div><div><b>${est||'—'}</b><span>סיום צפוי</span></div></div>
@@ -1298,7 +1301,7 @@ function openResult(mid){
       ${m.status==='playing'?`<button class="danger" onclick="retire('${ja(mid)}','${ja(m.p2)}')">${esc(pname(m.p2))} פרש/ה</button><button class="danger" onclick="retire('${ja(mid)}','${ja(m.p1)}')">${esc(pname(m.p1))} פרש/ה</button>`:''}
       ${m.status==='playing'?`<button onclick="backToQueue('${ja(mid)}')">החזר לתור (הוזן בטעות)</button>`:''}
     </div></details>`);
-  const box=document.getElementById('sets');
+  openMid=mid;const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input',e=>{inp.value=inp.value.replace(/\D/g,'').slice(0,2);const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
       // הצד השני מתעדכן עם כל ספרה (13 נותן 15), גם בתוצאה שנשמרה קודם; רק צד שהוקלד ידנית עכשיו לא נדרס
@@ -1398,7 +1401,7 @@ function openPointResult(m){
       pRefresh(m.id)});
     el.addEventListener('focus',()=>el.select());
     el.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('saveRes').click()});});
-  pRefresh(m.id);setTimeout(()=>document.getElementById('pa').focus(),50);
+  openMid=m.id;pRefresh(m.id);setTimeout(()=>document.getElementById('pa').focus(),50);
 }
 function pRefresh(mid){
   const m=S.matches.find(x=>x.id===mid);const tg=m.target||(m.stage==='king'?S.settings.kingTarget:S.settings.target);
@@ -1906,7 +1909,9 @@ window.addEventListener('fb-ready',()=>{
     if(u){try{const d=await FB.getDoc(FB.doc(FB.db,'users',u.uid));PROFILE=d.exists()?d.data():null}catch(e){PROFILE=null}}
     if(unsubList){unsubList();unsubList=null}
     closeTournament(true);
-    if(u&&PROFILE)watchList();
+    if(u&&PROFILE){watchList();
+      // רענון או עדכון גרסה: חוזרים לתחרות שהייתה פתוחה במכשיר הזה, לא לרשימה
+      let last=null;try{last=localStorage.getItem(KEY+'.last')}catch(e){}if(last){openTournament(last);return}}
     render();});
 });
 function watchList(){
@@ -1923,6 +1928,8 @@ function renderLogin(app){
 }
 async function doLogin(){const e=document.getElementById('lg_e').value.trim(),p=document.getElementById('lg_p').value;const err=document.getElementById('lg_err');err.style.display='none';try{await FB.signIn(e,p)}catch(x){err.style.display='block';err.textContent='הכניסה נכשלה — בדקו אימייל וסיסמה.'}}
 const PHASE_NAMES={setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'המשחקים רצים',ko:'נוקאאוט',final:'הסתיימה'};
+// השלב לפי הנתונים (לרשימת התחרויות ולמכשיר שפותח את התחרות בפעם הראשונה), לא לפי המסך שפתוח במכשיר מסוים
+function progPhase(){if(canFinish())return 'final';if(S.koBuilt)return 'ko';if(S.matches.length)return 'live';if(S.groups.length&&sys()==='groups-ko')return 'draw';return S.players.length?'players':'setup'}
 function fmtDate(d){if(!d)return '';const x=new Date(d+'T12:00');if(isNaN(x))return d;const o={weekday:'long',day:'numeric',month:'long'};if(x.getFullYear()!==new Date().getFullYear())o.year='numeric';return x.toLocaleDateString('he-IL',o)}
 function tMeta(t){return [fmtDate(t.date),`${t.playersCount||0} שחקנים`,PHASE_NAMES[t.phase]||''].filter(Boolean).join(' · ')}
 // התחרות שמוצגת בגדול: זו שרצה עכשיו, אחרת הקרובה שעוד לא הסתיימה
@@ -1949,49 +1956,84 @@ function renderList(app){
 function canDelete(){if(!PROFILE)return false;const perms=Array.isArray(PROFILE.permissions)?PROFILE.permissions:[];return String(PROFILE.role||'').toLowerCase()==='admin'||perms.includes('competitions')}
 async function newTournament(){
   const id=uid()+uid();S=fresh();S.rev=0;TID=id;CLOUD_REV=null;logEv('נפתחה תחרות חדשה','create');
-  const ok=await pushCloud(true);
-  openTournament(id);
+  const ok=await pushCloud(true);if(!ok)PENDING_NEW=id;
+  openTournament(id);localView=true;
   if(!ok)setTimeout(diagnostics,400);
 }
 async function openTournament(id){
   TID=id;const cached=localStorage.getItem(KEY+'.'+id);if(cached){try{S=Object.assign(fresh(),JSON.parse(cached))}catch(e){}}
+  localView=!!cached;lastSig=stSig();try{localStorage.setItem(KEY+'.last',id)}catch(e){}
   CLOUD_REV=null;try{const b=localStorage.getItem(KEY+'.'+id+'.base');if(b!==null&&b!==''&&!isNaN(+b))CLOUD_REV=+b}catch(e){}
   const ref=FB.doc(FB.db,'tournaments',id);
   if(unsubT)unsubT();
   unsubT=FB.onSnapshot(ref,snap=>{
-    if(!snap.exists()){closeTournament();toast('התחרות נמחקה');return}
+    if(!snap.exists()){if(id===PENDING_NEW)return;closeTournament();toast('התחרות נמחקה');return}
     const d=snap.data();if(!d.state)return;
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
-    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=Math.max(S.rev||0,d.rev||0);setBase(id,d.rev||0);localStorage.setItem(KEY+'.'+id,d.state);closeModal();render()}catch(e){console.error(e)}}
+    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{applyCloud(id,d.state,Math.max(S.rev||0,d.rev||0),d.rev||0)}catch(e){console.error(e)}}
     else if((d.rev||0)<(S.rev||0)){scheduleCloud()}
     setSync('saved');
   },e=>{console.error(e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('אין גישה לענן. עובדים מהמכשיר.',{label:'בדיקה',fn:diagnostics})}});
   render();
 }
-function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent)render()}
+function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent){try{localStorage.removeItem(KEY+'.last')}catch(e){}render()}}
+// מצב מהענן: הלשונית והמסך נשארים של המכשיר הזה; חלון תוצאה פתוח נסגר רק אם המשחק שבו השתנה; מה שמוקלד במסך נשאר
+let localView=false,openMid=null;
+function applyCloud(tid,state,rev,base){
+  const st=JSON.parse(state);const old=S,om=openMid&&JSON.stringify(old.matches.find(x=>x.id===openMid));
+  S=Object.assign(fresh(),st);S.rev=rev;
+  if(localView){S.tab=old.tab;S.phase=old.phase}else{S.phase=progPhase();localView=true}
+  // מכשיר אחר התחיל את התחרות: מי שעומד במסכי ההכנה עובר למשחקים (רק המעבר הזה, לא כל לחיצה)
+  if(!old.matches.length&&S.matches.length&&['setup','players','draw'].includes(S.phase))S.phase='live';
+  setBase(tid,base);lastSig=stSig();try{localStorage.setItem(KEY+'.'+tid,JSON.stringify(S))}catch(e){}
+  if(openMid&&JSON.stringify(S.matches.find(x=>x.id===openMid))!==om){closeModal();toast('המשחק שפתחת עודכן במכשיר אחר')}
+  const ae=document.activeElement,fid=ae&&ae.id&&ae.closest('#app')?ae.id:null;
+  const dirty=[...document.querySelectorAll('#app [data-dirty]')].map(e=>[e.id,e.value]);
+  render(true);
+  dirty.forEach(([id,v])=>{const e=document.getElementById(id);if(e&&!e.disabled){e.value=v;e.dataset.dirty=1}});
+  if(fid){const e=document.getElementById(fid);if(e)e.focus({preventScroll:true})}
+}
+document.addEventListener('input',e=>{const t=e.target;if(t.id&&t.closest&&t.closest('#app'))t.dataset.dirty=1},true);
 let syncState='idle',syncErr=null,retryN=0,retryT=null,warnedOnce=false;
 /* מניעת "עדכון אבוד": CLOUD_REV הוא ה-rev של הגרסה בענן שהמצב המקומי כבר כולל (קיבלנו אותה או כתבנו אותה).
    השמירה נעשית בטרנזקציה: אם בענן יש בינתיים גרסה של מכשיר אחר שלא ראינו — לא דורסים אותה.
    במקום זה מקבלים את גרסת הענן, שומרים את הגרסה המקומית כגיבוי (localStorage + כפתור הורדה) ומבקשים להזין שוב.
    מיזוג אוטומטי ברמת משחק לא נעשה בכוונה: משחק אחד משפיע על שולחנות, תור, עץ נוקאאוט וסיבובים הבאים,
    ומיזוג חלקי עלול לייצר מצב שבור. */
-let CLOUD_REV=null;
+let CLOUD_REV=null,PENDING_NEW=null;
 function setBase(id,rev){if(id===TID)CLOUD_REV=rev;try{localStorage.setItem(KEY+'.'+id+'.base',String(rev))}catch(e){}}
-function onCloudConflict(tid,d,pushed){
-  // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
-  const open=TID===tid;const mine=open?JSON.stringify(S):pushed;let nm='tournament';try{nm=JSON.parse(mine).settings.name||nm}catch(e){}
+function onCloudConflict(tid,d,pushed,base){
+  // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה ועדיין על אותה גרסה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
+  const open=TID===tid;let mine=open&&CLOUD_REV===base?JSON.stringify(S):pushed;
+  // גיבוי קודם שעוד לא הוחזר לא נדרס: תוצאה שהייתה בו וחסרה בחדש נשארת
+  try{const o=JSON.parse(localStorage.getItem(KEY+'.'+tid+'.conflict')||'null');if(o&&o.matches){const n=JSON.parse(mine);n.matches=n.matches.map(x=>{const y=o.matches.find(z=>z.id===x.id);return y&&y.status==='done'&&x.status!=='done'?y:x});mine=JSON.stringify(n)}}catch(e){}
   try{localStorage.setItem(KEY+'.'+tid+'.conflict',mine)}catch(e){}
   const offer={label:'החזר את השינויים שלי',fn:()=>restoreMine(tid)};
   if(!open){toast('עודכן ממכשיר אחר — הזן שוב',offer);return}
   clearTimeout(cloudT);cloudT=null;
-  try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=d.rev||0;setBase(tid,d.rev||0);localStorage.setItem(KEY+'.'+tid,d.state)}catch(e){console.error(e)}
-  setSync('saved');closeModal();render();
+  try{applyCloud(tid,d.state,d.rev||0,d.rev||0)}catch(e){console.error(e)}
+  setSync('saved');
   toast('עודכן ממכשיר אחר — הזן שוב',offer);
 }
 // שחזור השינויים שהמכשיר הזה עשה בזמן שהענן כבר עודכן ממכשיר אחר. לא דורסים אוטומטית: המשתמש בוחר.
-function restoreMine(tid){const raw=localStorage.getItem(KEY+'.'+tid+'.conflict');if(!raw)return;if(TID!==tid){toast('פתחו את התחרות ולחצו שוב');return}
-  try{S=Object.assign(fresh(),JSON.parse(raw));S.rev=CLOUD_REV||S.rev;localStorage.removeItem(KEY+'.'+tid+'.conflict');commit();toast('השינויים שלך הוחזרו')}catch(e){toast('לא הצלחנו לשחזר')}}
+// מחזירים רק תוצאות שחסרות בענן, דרך המנוע הרגיל (שולחנות, תור, עץ). משחק שכבר הוזן במכשיר השני לא נדרס.
+function mineOf(tid){try{const m=JSON.parse(localStorage.getItem(KEY+'.'+tid+'.conflict')||'null');return m&&m.matches?m:null}catch(e){return null}}
+function sameRes(a,b){return !!a&&!!b&&a.status===b.status&&a.winner===b.winner&&JSON.stringify(a.sets||[])===JSON.stringify(b.sets||[])&&JSON.stringify(a.score||null)===JSON.stringify(b.score||null)}
+function lostMatches(mine){return mine.matches.filter(x=>x.status==='done'&&!x.bye&&!sameRes(x,S.matches.find(y=>y.id===x.id))).sort((a,b)=>(a.endedAt||0)-(b.endedAt||0))}
+function canRestore(x){const c=S.matches.find(y=>y.id===x.id);return !!c&&c.status!=='done'&&matchPids(c).join()===matchPids(x).join()}
+function dropConflict(){try{localStorage.removeItem(KEY+'.'+TID+'.conflict')}catch(e){}render()}
+function restoreMine(tid){const mine=mineOf(tid);if(!mine)return;if(TID!==tid){toast('פתחו את התחרות ולחצו שוב');return}
+  hideToast();let n=0;
+  for(const x of lostMatches(mine)){if(!canRestore(x))continue;const c=S.matches.find(y=>y.id===x.id);n++;
+    if(isPointGame(c))finishPoint(c,x.score,x.winSide,true);else finishMatch(c,x.winner,x.sets,{wo:!!x.wo,retired:x.retired||null},true)}
+  const left=lostMatches(mine).length;if(!left)try{localStorage.removeItem(KEY+'.'+tid+'.conflict')}catch(e){}
+  commit();toast(n?`הוחזרו ${n} תוצאות`+(left?`. ${left} משחקים עודכנו גם במכשיר השני, בדקו אותם`:''):'לא היה מה להחזיר: המשחקים כבר עודכנו במכשיר השני')}
+// באנר קבוע (לא רק הודעה ל-10 שניות): אילו תוצאות מהמכשיר הזה חסרות בענן
+function conflictBanner(){const mine=mineOf(TID);if(!mine)return '';const lost=lostMatches(mine);if(!lost.length){try{localStorage.removeItem(KEY+'.'+TID+'.conflict')}catch(e){}return ''}
+  return `<div class="err-box" style="margin-bottom:12px"><b>⚠️ ${lost.length} תוצאות שהוזנו במכשיר הזה לא נשמרו בענן</b> (מכשיר אחר שמר באותו זמן):
+  <ul style="margin:6px 0;padding-right:18px">${lost.map(x=>`<li>${esc(sideName(x,1))} – ${esc(sideName(x,2))}: ${esc(x.score?x.score.join(':'):(x.sets||[]).map(s=>s.join('-')).join(', '))}${canRestore(x)?'':' <span class="tiny">(המשחק כבר עודכן במכשיר השני, בדקו ידנית)</span>'}</li>`).join('')}</ul>
+  <div class="row">${lost.some(canRestore)?'<button class="primary" onclick="restoreMine(TID)">החזר את מה שחסר</button>':''}<button class="ghost" onclick="dropConflict()">הסתר</button></div></div>`}
 function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
 /* שמירות לענן רצות אחת אחרי השנייה (לא במקביל): שמירה איטית שנשלחה קודם לא יכולה לנחות אחרי שמירה חדשה יותר
    של אותו מכשיר ולהחזיר את הענן אחורה. התוכן נלכד ברגע הקריאה; שמירה שממתינה בתור מתעדכנת לתוכן האחרון. */
@@ -2000,7 +2042,7 @@ function pushCloud(force){
   if(!TID||!USER)return Promise.resolve(false);cloudT=null;clearTimeout(retryT);
   if(!navigator.onLine){setSync('offline');scheduleRetry();return Promise.resolve(false)}
   setSync('saving');
-  const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
+  const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:progPhase(),playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
   if(S.settings.publicLink)body.publicLink=true;
   const tid=TID;const queued=pushQ.get(tid);
@@ -2012,7 +2054,7 @@ function pushCloud(force){
 }
 function baseFor(tid){if(tid===TID)return CLOUD_REV;try{const b=localStorage.getItem(KEY+'.'+tid+'.base');if(b!==null&&b!==''&&!isNaN(+b))return +b}catch(e){}return null}
 async function pushOnce(job){
-  const {tid,body}=job;const rev=body.rev,base=baseFor(tid),ref=FB.doc(FB.db,'tournaments',tid);
+  const {tid,body,base}=job;const rev=body.rev,ref=FB.doc(FB.db,'tournaments',tid);
   try{
     let res=null;
     if(!FB.runTransaction){await FB.setDoc(ref,body,{merge:true})}
@@ -2028,11 +2070,11 @@ async function pushOnce(job){
           if(!ok)return {conflict:d};}
         tx.set(ref,body,{merge:true});return null;
       });
-      if(res&&res.conflict){retryN=0;syncErr=null;onCloudConflict(tid,res.conflict,body.state);return false}
+      if(res&&res.conflict){retryN=0;syncErr=null;onCloudConflict(tid,res.conflict,body.state,base);return false}
     }
     const b=res&&res.stale!=null?res.stale:rev;const cur=baseFor(tid);
     if(cur==null||b>cur)setBase(tid,b);
-    retryN=0;syncErr=null;if(!pushQ.size&&!cloudT)setSync('saved');
+    retryN=0;syncErr=null;if(tid===PENDING_NEW)PENDING_NEW=null;if(!pushQ.size&&!cloudT)setSync('saved');
     if(body.publicLink)FB.setDoc(FB.doc(FB.db,'tournamentsPublic',tid),{name:body.name,phase:body.phase,updatedAt:body.updatedAt,state:JSON.stringify(publicState(JSON.parse(body.state)))}).catch(e=>console.error('public',e));
     return true;
   }catch(e){
@@ -2172,8 +2214,8 @@ function pubBody(sc){
 function closePublic(){clearInterval(pubTimer);document.getElementById('public').innerHTML='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 
 /* ========================= UI helpers ========================= */
-function modal(html){document.getElementById('modal').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`}
-function closeModal(){document.getElementById('modal').innerHTML=''}
+function modal(html){openMid=null;document.getElementById('modal').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`}
+function closeModal(){openMid=null;document.getElementById('modal').innerHTML=''}
 let toastT=null;
 function toast(msg,action){const t=document.getElementById('toast');t.innerHTML=`<div class="toast"><span>${esc(msg)}</span>${action?`<button id="toastBtn">${action.label}</button>`:''}</div>`;if(action)document.getElementById('toastBtn').onclick=action.fn;clearTimeout(toastT);toastT=setTimeout(hideToast,action?10000:3000)}
 function hideToast(){document.getElementById('toast').innerHTML=''}
