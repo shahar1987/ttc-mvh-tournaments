@@ -515,7 +515,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-17.26';
+const APP_VER='2026-10-18.1';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -529,7 +529,10 @@ let S=fresh();
 function fresh(){const o=JSON.parse(JSON.stringify(DEF));o.settings.date=todayIL();return o}
 // התאריך של היום לפי שעון ישראל (YYYY-MM-DD), מחושב מחדש בכל תחרות חדשה ולא פעם אחת בטעינה ב-UTC.
 function todayIL(){try{const p={};new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).forEach(x=>p[x.type]=x.value);if(p.year&&p.month&&p.day)return p.year+'-'+p.month+'-'+p.day}catch(e){}return new Date().toISOString().slice(0,10)}
-function save(){if(!TID)return;S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}scheduleCloud()}
+// הלשונית והמסך (tab, phase) של כל מכשיר לעצמו: שינוי רק שלהם נשמר במכשיר ולא נשלח לענן (אחרת כל המכשירים זזים איתו)
+let lastSig=null;
+function stSig(){return JSON.stringify(S,(k,v)=>k==='tab'||k==='phase'||k==='rev'?undefined:v)}
+function save(){if(!TID)return;const sig=stSig(),changed=sig!==lastSig;lastSig=sig;if(changed)S.rev=(S.rev||0)+1;try{localStorage.setItem(KEY+'.'+TID,JSON.stringify(S))}catch(e){}if(changed)scheduleCloud()}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function logEv(t,kind){
   S.log.unshift({t:Date.now(),m:t,by:(PROFILE&&PROFILE.name)||(USER&&USER.email)||'',k:kind||'',d:S.rev||0});
@@ -588,8 +591,8 @@ function renderSteps(){
 }
 
 /* ========================= RENDER ========================= */
-function render(){
-  if(S.phase==='setup')keepSetup();
+function render(remote){
+  if(S.phase==='setup'&&!remote)keepSetup();
   const app=document.getElementById('app');
   document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID));
   if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
@@ -640,14 +643,15 @@ function renderSetup(app){
       ${s.consolation?`<label class="chip ${s.consPlace?'on':''}" title="מי שמפסיד בנוקאאוט התחתון ממשיך לשחק על מקומות, כך שכל אחד מסיים עם מקום מדויק"><input type="checkbox" ${s.consPlace?'checked':''} ${S.koBuilt?'disabled':''} onchange="S.settings.consPlace=this.checked;commit()">דירוג מלא בנוקאאוט התחתון</label>`:''}
     </div>`:''}
     ${s.system==='swiss'?`<div class="grid2">
-      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
+      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="${S.players.length>=4?Math.min(12,swissMaxRounds(S.players.length)):12}" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים${S.players.length>=4?`, לכל היותר ${swissMaxRounds(S.players.length)} (יותר מזה יש משחקים חוזרים)`:''}</div></div>
       <div><label>מערכות בכל משחק</label><select id="s_bog" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boGroup==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div>
     </div>
+    ${s.swissKO?`<div class="grid2"><div><label>מערכות בנוקאאוט</label><select id="s_bok" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boKO==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div><div></div></div>`:''}
     <div class="row"><label class="chip ${s.swissKO?'on':''}"><input type="checkbox" ${s.swissKO?'checked':''} ${locked?'disabled':''} onchange="S.settings.swissKO=this.checked;commit()">נוקאאוט למובילים בסוף</label>
       ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
     ${isTeamSys()?`<div class="grid2">
       <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${esc(s.rounds)}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
-      <div><label>משחק עד כמה נקודות</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
+      <div><label>כמה נקודות בכל משחק (סך הכול)</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">משחקים עד שנשחקו כל הנקודות (למשל 21 = 13:8). הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
     </div>`:''}
     ${s.system==='king'?`<div class="grid2">
       <div><label>משחק עד כמה נקודות</label><select id="s_king" ${locked?'disabled':''}>${[5,7,11,15,21].map(n=>`<option value="${n}" ${s.kingTarget==n?'selected':''}>${n} נקודות</option>`).join('')}</select></div>
@@ -706,10 +710,10 @@ function keepSetup(){
     if(q('s_swr'))s.swissRounds=Math.max(1,+q('s_swr').value||5);
     if(q('s_rounds'))s.rounds=Math.max(1,+q('s_rounds').value||6);
     if(q('s_target'))s.target=+q('s_target').value; if(q('s_king'))s.kingTarget=+q('s_king').value;}
-  s.tables=Math.max(1,+q('s_tables').value||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
+  s.tables=Math.max(1,Math.round(+q('s_tables').value)||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
 }
 function syncTables(){
-  const n=S.settings.tables;const before=S.tables.length;
+  const n=S.settings.tables=Math.max(1,Math.round(+S.settings.tables)||1);const before=S.tables.length;
   while(S.tables.length<n)S.tables.push({n:S.tables.length+1,lock:null,matchId:null,note:''});
   if(S.tables.length>n){const extra=S.tables.slice(n);if(extra.some(t=>t.matchId)){toast('יש שולחנות בשימוש. סיימו אותם קודם.');S.settings.tables=S.tables.length;return}S.tables.length=n;extra.forEach(t=>{const h=(S.kingHolders||{})[t.n];if(h&&P(h)&&!S.kingQueue.includes(h))S.kingQueue.unshift(h);if(S.kingHolders)delete S.kingHolders[t.n]})}
   let healed=false;
@@ -762,15 +766,17 @@ function renderPlayers(app){
   </div>`;
   setTimeout(()=>document.getElementById('p_name')?.focus(),0);
 }
+function normName(n){return String(n||'').trim().replace(/\s+/g,' ').toLowerCase()}
+function hasName(n){return S.players.some(p=>normName(p.name)===normName(n))}
 function addPlayer(){
-  const n=document.getElementById('p_name').value.trim();if(!n)return;
+  const n=document.getElementById('p_name').value.trim().replace(/\s+/g,' ');if(!n)return;
   const club=document.getElementById('p_club').value.trim();const seed=+document.querySelector('input[name=seed]:checked').value;
-  if(S.players.some(p=>p.name===n)){toast('כבר יש שחקן בשם הזה');return}
+  if(hasName(n)){toast('כבר יש שחקן בשם הזה');return}
   S.players.push({id:uid(),name:n,club,seed});commit();
 }
 function bulkAdd(){
   const lines=document.getElementById('p_bulk').value.split('\n').map(l=>l.trim()).filter(Boolean);let c=0;
-  for(const l of lines){const parts=l.split(/[,\t]/).map(x=>x.trim());const name=parts[0].replace(/^\d+[.)\-]\s*/,'');if(!name||S.players.some(p=>p.name===name))continue;
+  for(const l of lines){const parts=l.split(/[,\t]/).map(x=>x.trim());const name=parts[0].replace(/^\d+[.)\-]\s*/,'').replace(/\s+/g,' ');if(!name||hasName(name))continue;
     let seed=0,club='';for(const x of parts.slice(1)){if(/^[123]$/.test(x))seed=+x;else if(x)club=x}
     S.players.push({id:uid(),name,club,seed});c++}
   toast(`נוספו ${c} שחקנים`);commit();
@@ -816,7 +822,7 @@ function planDesc(p){
 function planCard(n){
   if(sys()==='swiss'){
     const r=S.settings.swissRounds||suggestSwissRounds(n);
-    return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
+    return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].filter(x=>x<=swissMaxRounds(n)).map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
     <div class="hint">${esc(r)} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
   }
   if(isTeamSys()||sys()==='king')return '';
@@ -965,8 +971,8 @@ function resolve(pids,ms,explain,gid,depth){
   }
   // full tie -> lot
   const key=gid+':'+pids.slice().sort().join(',');
-  if(!S.lots[key]){S.lots[key]=shuffle(pids.slice());save()}
-  const lot=S.lots[key].filter(id=>pids.includes(id));
+  const hh=x=>{let h=2166136261;for(const c of key+'#'+x)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0};
+  const lot=(S.lots[key]||pids.slice().sort((a,b)=>hh(a)-hh(b))).filter(id=>pids.includes(id));
   pids.forEach(id=>explain[id].push('שוויון מוחלט — המיקום נקבע בהגרלה'));
   return lot;
 }
@@ -1041,12 +1047,13 @@ function renderLive(app){
   const title=koPhase?'נוקאאוט':SYSTEMS[sy].live;
   const standTab=sy==='groups-ko'?['groups','טבלאות הבתים']:sy==='swiss'?['groups','טבלה']:isTeamSys()?['groups','טבלה אישית']:['groups','מלכים ותור'];
   const standFn=sy==='groups-ko'?groupsTab:sy==='swiss'?swissTab:isTeamSys()?amTab:kingTab;
-  app.innerHTML=`
+  app.innerHTML=`${conflictBanner()}
   <div class="live-top">
     <div><h1>${title}</h1><div class="tiny">${esc(S.settings.name)} · ${esc(S.settings.date)} · ${SYSTEMS[sy].n}</div></div>
     <div class="stat"><div><b>${done}${sy==='king'?'':'/'+total}</b><span>משחקים</span></div><div><b>${S.tables.filter(t=>t.matchId).length}/${S.tables.length}</b><span>שולחנות פעילים</span></div><div><b>${est||'—'}</b><span>סיום צפוי</span></div></div>
   </div>
   ${sy==='king'?'':`<div class="progress"><i style="width:${total?Math.min(100,done/total*100):0}%"></i></div>`}
+  ${sitLine()}
   <div class="tabs">
     ${[['dash','לוח בקרה'],['tables','שולחנות ותור'],standTab,['bracket','עץ הנוקאאוט'],['log','יומן']].filter(t=>t[0]!=='bracket'||S.koBuilt||sy==='groups-ko').map(([k,l])=>`<button class="tab ${tab===k?'active':''}" onclick="S.tab='${k}';commit()">${l}</button>`).join('')}
   </div>
@@ -1082,15 +1089,16 @@ function estimateFinish(){
 }
 function canFinish(){
   const sy=sys();
-  if(sy==='king')return S.matches.some(m=>m.stage==='king'&&m.status==='done');
+  // מלך השולחן נגמר רק בלחיצה על "סיום" (תחרות ישנה בלי הסימון: לפי המסך שנשמר)
+  if(sy==='king')return S.kingDone===undefined?S.phase==='final':!!S.kingDone;
   if(isTeamSys())return S.matches.filter(m=>m.stage==='round').length>0&&S.matches.filter(m=>m.stage==='round').every(m=>m.status==='done')&&amRoundsDone()>=S.settings.rounds;
   if(sy==='swiss'&&!S.settings.swissKO)return swissRoundsDone()>=S.settings.swissRounds&&S.matches.filter(m=>m.stage==='swiss').every(m=>m.status==='done');
   return S.koBuilt&&koFinished();
 }
 /* ---------- Player card ---------- */
 function playerHits(q){
-  q=(q||'').trim();if(q.length<2)return '';
-  const hits=S.players.filter(p=>p.name.includes(q)).slice(0,4);
+  q=normName(q);if(q.length<2)return '';
+  const hits=S.players.filter(p=>normName(p.name).includes(q)).slice(0,4);
   if(!hits.length)return '<div class="card muted" style="margin-bottom:10px">לא נמצא שחקן בשם הזה</div>';
   return hits.map(p=>playerCard(p.id)).join('');
 }
@@ -1133,7 +1141,7 @@ function quickAdd(){
   modal(`<h2>הוספת שחקן</h2><p class="muted">${sys()==='king'?'ייכנס לסוף התור.':'ישתתף מהסיבוב הבא.'}</p><label>שם</label><input id="qa_n"><div class="row" style="margin-top:14px"><button class="primary" onclick="doQuickAdd()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
   setTimeout(()=>document.getElementById('qa_n').focus(),50);
 }
-function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n)return;if(S.players.some(p=>p.name===n)){toast('כבר יש שחקן בשם הזה');return}const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
+function doQuickAdd(){const n=document.getElementById('qa_n').value.trim().replace(/\s+/g,' ');if(!n)return;if(hasName(n)){toast('כבר יש שחקן בשם הזה');return}const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
   if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
   logEv('נוסף שחקן: '+n,'player');closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
@@ -1265,7 +1273,7 @@ function tablesTab(){
 function matchLabel(m){
   if(m.stage==='group')return `${G(m.groupId)?.name||''} · סיבוב ${m.round}`;
   if(m.stage==='swiss')return `סיבוב ${m.round}`;
-  if(m.stage==='round')return `סיבוב ${m.round} · עד ${m.target||S.settings.target}`;
+  if(m.stage==='round')return `סיבוב ${m.round} · ${m.target||S.settings.target} נק׳ סך הכול`;
   if(m.stage==='king')return `מלך השולחן · עד ${m.target||S.settings.kingTarget}`;
   return (isCons(m.bracket)?'נוקאאוט תחתון · ':'')+koRoundName(m);
 }
@@ -1298,7 +1306,7 @@ function openResult(mid){
       ${m.status==='playing'?`<button class="danger" onclick="retire('${ja(mid)}','${ja(m.p2)}')">${esc(pname(m.p2))} פרש/ה</button><button class="danger" onclick="retire('${ja(mid)}','${ja(m.p1)}')">${esc(pname(m.p1))} פרש/ה</button>`:''}
       ${m.status==='playing'?`<button onclick="backToQueue('${ja(mid)}')">החזר לתור (הוזן בטעות)</button>`:''}
     </div></details>`);
-  const box=document.getElementById('sets');
+  openMid=mid;const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input',e=>{inp.value=inp.value.replace(/\D/g,'').slice(0,2);const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
       // הצד השני מתעדכן עם כל ספרה (13 נותן 15), גם בתוצאה שנשמרה קודם; רק צד שהוקלד ידנית עכשיו לא נדרס
@@ -1356,9 +1364,12 @@ function saveResult(mid){
 }
 function walkover(mid,absent){const m=S.matches.find(x=>x.id===mid);if(!confirm(`${pname(absent)} לא הגיע/ה — ניצחון טכני ל${pname(absent===m.p1?m.p2:m.p1)}?`))return;if(m.status==='done'&&m.stage==='ko'&&koHasDownstream(m)){if(!confirm('המשחק הזה כבר קידם שחקן בעץ. לשנות בכל זאת? המשחקים הבאים יאופסו.'))return;resetDownstream(m)}const need=needSets(m);const w=absent===m.p1?m.p2:m.p1;const sets=[];for(let i=0;i<need;i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null})}
 // שחקן שיצא מהתחרות: כל משחק שלו (עכשיו ובהמשך העץ) נסגר כניצחון טכני ליריב
-function withdrawPlayer(pid){if(!confirm(`להוציא את ${pname(pid)} מהתחרות? כל המשחקים שנשארו לו/ה ייסגרו כניצחון טכני ליריב.`))return;S.out=[...(S.out||[]),pid];commit();if(!autoOut())autoDistribute();toast(`${pname(pid)} יצא/ה מהתחרות`)}
+function withdrawPlayer(pid){if(!confirm(`להוציא את ${pname(pid)} מהתחרות? כל המשחקים שנשארו לו/ה ייסגרו כניצחון טכני ליריב.`))return;S.out=[...(S.out||[]),pid];S.kingQueue=(S.kingQueue||[]).filter(x=>x!==pid);if(isTeamSys())amWithdraw(pid);commit();if(!autoOut())autoDistribute();toast(`${pname(pid)} יצא/ה מהתחרות`)}
 function autoOut(){const out=S.out||[];if(!out.length)return false;const m=S.matches.find(x=>x.status!=='done'&&x.p1&&x.p2&&(out.includes(x.p1)||out.includes(x.p2)));if(!m)return false;
-  const absent=out.includes(m.p1)?m.p1:m.p2;const w=absent===m.p1?m.p2:m.p1;const sets=[];for(let i=0;i<needSets(m);i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null},true);return true}
+  const absent=out.includes(m.p1)?m.p1:m.p2;const w=absent===m.p1?m.p2:m.p1;
+  // מלך השולחן: היריב מקבל ניצחון ונשאר על השולחן (דרך הלוגיקה של המלך, לא סגירה רגילה שמעלימה אותו)
+  if(m.stage==='king'){const tg=m.target||S.settings.kingTarget;finishPoint(m,w===m.p1?[tg,0]:[0,tg],w===m.p1?1:2,true);return true}
+  const sets=[];for(let i=0;i<needSets(m);i++)sets.push(w===m.p1?[11,0]:[0,11]);finishMatch(m,w,sets,{wo:true,retired:null},true);return true}
 function retire(mid,who){const m=S.matches.find(x=>x.id===mid);const need=needSets(m);const w=who===m.p1?m.p2:m.p1;const sets=[];let a=0,b=0;for(const s of readSets(m).filter(s=>s&&validSet(s[0],s[1]))){const l=s[0]>s[1]?1:2;if((w===m.p1?l===2&&b>=need-1:l===1&&a>=need-1))continue;sets.push(s);if(l===1)a++;else b++}while((w===m.p1?a:b)<need){sets.push(w===m.p1?[11,0]:[0,11]);if(w===m.p1)a++;else b++}finishMatch(m,w,sets,{wo:false,retired:who})}
 function backToQueue(mid){const m=S.matches.find(x=>x.id===mid);const t=S.tables.find(x=>x.matchId===mid);if(t)t.matchId=null;
   if(m.stage==='king'){S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)];S.matches=S.matches.filter(x=>x.id!==mid);closeModal();commit();return}
@@ -1387,7 +1398,7 @@ function openPointResult(m){
   modal(`<h2>${esc(matchLabel(m))}${m.table?' · שולחן '+esc(m.table):''}</h2>
   <div class="names"><div>${esc(sideName(m,1))}</div><div></div><div>${esc(sideName(m,2))}</div></div>
   <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pa" value="${esc(sc[0])}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pb" value="${esc(sc[1])}" placeholder="–"></div></div>
-  <div class="hint">משחק עד ${esc(tg)}. מקלידים צד אחד — השני מתמלא להשלמה.</div>
+  <div class="hint">${m.stage==='king'?`משחק עד ${esc(tg)}, בהפרש 2.`:`סך הכול ${esc(tg)} נקודות בין שני הצדדים (תיקו מותר).`} מקלידים צד אחד — השני מתמלא להשלמה.</div>
   <div class="quick"><span class="tiny">מהיר:</span><button onclick="document.getElementById('pa').value=${Number(tg)};document.getElementById('pb').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,1))} ${esc(tg)}:0</button><button onclick="document.getElementById('pb').value=${Number(tg)};document.getElementById('pa').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,2))} ${esc(tg)}:0</button></div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
   <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="savePoint('${ja(m.id)}')">שמור ופנה שולחן</button><button class="ghost" onclick="closeModal()">סגור</button>
@@ -1398,7 +1409,7 @@ function openPointResult(m){
       pRefresh(m.id)});
     el.addEventListener('focus',()=>el.select());
     el.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('saveRes').click()});});
-  pRefresh(m.id);setTimeout(()=>document.getElementById('pa').focus(),50);
+  openMid=m.id;pRefresh(m.id);setTimeout(()=>document.getElementById('pa').focus(),50);
 }
 function pRefresh(mid){
   const m=S.matches.find(x=>x.id===mid);const tg=m.target||(m.stage==='king'?S.settings.kingTarget:S.settings.target);
@@ -1407,30 +1418,31 @@ function pRefresh(mid){
   let err='';
   if(a===null||b===null)err='';
   else if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0)err='נקודות חייבות להיות מספר שלם וחיובי';
-  else if(m.stage==='king'){if(Math.max(a,b)<tg)err='המשחק עד '+tg+' נקודות';else if(a===b)err='חייב מנצח'}
+  else if(m.stage==='king'){const hi=Math.max(a,b),lo=Math.min(a,b);if(hi<tg)err='המשחק עד '+tg+' נקודות';else if(hi===tg?lo>tg-2:hi-lo!==2)err=`מנצחים ב-${tg} עם הפרש 2 לפחות. אחרי ${tg-1}:${tg-1} ממשיכים עד הפרש 2 בדיוק`}
   else if(a+b!==tg)err=`הסכום צריך להיות ${tg} (עכשיו ${a+b})`;
-  else if(a===b)err='תיקו לא אפשרי — שנו נקודה אחת';
   const e=document.getElementById('resErr');e.style.display=err?'block':'none';e.textContent=err;
   const ok=a!==null&&b!==null&&!err;document.getElementById('saveRes').disabled=!ok;
 }
 function savePoint(mid){
   const m=S.matches.find(x=>x.id===mid);
   const a=+document.getElementById('pa').value,b=+document.getElementById('pb').value;
-  const winner=a>b?1:2;
+  const winner=a>b?1:a<b?2:0;
   finishPoint(m,[a,b],winner);
 }
-function finishPoint(m,score,side){
+function finishPoint(m,score,side,quiet){
   const prev=JSON.parse(JSON.stringify(m));
   const kingSnap=m.stage==='king'?JSON.parse(JSON.stringify({q:S.kingQueue,h:S.kingHolders,c:S.kingCrowns||{}})):null;
-  m.score=score;m.status='done';m.endedAt=Date.now();m.winSide=side;m.winner=sideIds(m,side)[0];
+  const edit=prev.status==='done';
+  m.score=score;m.status='done';m.endedAt=edit&&prev.endedAt||Date.now();m.winSide=side;m.winner=side?sideIds(m,side)[0]:null;
   const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;
-  matchPids(m).forEach(id=>S.lastPlayed[id]=m.endedAt);
-  if(m.stage==='king'&&t){S.kingHolders[t.n]=m.winner;const loser=sideIds(m,side===1?2:1)[0];S.kingQueue=S.kingQueue.filter(x=>x!==loser);S.kingQueue.push(loser);S.kingCrowns=S.kingCrowns||{};S.kingCrowns[m.winner]=(S.kingCrowns[m.winner]||0)+1}
+  // עריכה של תוצאה ישנה לא מסמנת את השחקנים "במנוחה"
+  if(!edit)matchPids(m).forEach(id=>S.lastPlayed[id]=m.endedAt);
+  if(m.stage==='king'&&t){S.kingHolders[t.n]=m.winner;const loser=sideIds(m,side===1?2:1)[0];S.kingQueue=S.kingQueue.filter(x=>x!==loser);if(!(S.out||[]).includes(loser))S.kingQueue.push(loser);S.kingCrowns=S.kingCrowns||{};S.kingCrowns[m.winner]=(S.kingCrowns[m.winner]||0)+1}
   m.table=null;
-  logEv(`${sideName(m,side)} ניצח/ה ${score[0]}:${score[1]}`);
-  S.lastUndo={mid:m.id,prev,tableN:t?t.n:null,king:m.stage==='king'?JSON.parse(JSON.stringify({prevKing:kingSnap})):null,ids:S.matches.map(x=>x.id)};
-  closeModal();commit();
-  toast(`${sideName(m,side)} ${score.join(':')}`,{label:'ביטול',fn:undoLast});
+  logEv(side?`${sideName(m,side)} ניצח/ה ${score[0]}:${score[1]}`:`תיקו ${score[0]}:${score[1]} · ${sideName(m,1)} – ${sideName(m,2)}`);
+  if(!quiet){S.lastUndo={mid:m.id,prev,tableN:t?t.n:null,king:m.stage==='king'?JSON.parse(JSON.stringify({prevKing:kingSnap})):null,ids:S.matches.map(x=>x.id)};closeModal()}
+  commit();
+  if(!quiet)toast(`${side?sideName(m,side):'תיקו'} ${score.join(':')}`,{label:'ביטול',fn:undoLast});
   autoDistribute();
 }
 
@@ -1469,7 +1481,7 @@ function lateEntry(){
   <div class="row" style="margin-top:16px"><button class="primary" onclick="doLateEntry()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
 }
 function doLateEntry(){
-  const name=document.getElementById('le_name').value.trim();if(!name){toast('צריך שם');return}if(S.players.some(p=>p.name===name)){toast('כבר יש שחקן בשם הזה');return}
+  const name=document.getElementById('le_name').value.trim().replace(/\s+/g,' ');if(!name){toast('צריך שם');return}if(hasName(name)){toast('כבר יש שחקן בשם הזה');return}
   const club=document.getElementById('le_club').value.trim();const gid=document.querySelector('input[name=leg]:checked')?.value;if(!gid)return;
   const p={id:uid(),name,club,seed:0,late:true};S.players.push(p);
   let g;
@@ -1494,6 +1506,7 @@ function startSwiss(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.byes=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
   if(!S.settings.swissRounds)S.settings.swissRounds=suggestSwissRounds(S.players.length);
+  {const mx=swissMaxRounds(S.players.length);if(S.settings.swissRounds>mx){S.settings.swissRounds=mx;toast(`עם ${S.players.length} שחקנים אפשר עד ${mx} סיבובים בלי משחק חוזר, לכן ${mx} סיבובים`)}}
   swissNextRound();logEv(`התחילה תחרות שוויצרית — ${S.settings.swissRounds} סיבובים`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function swissStandings(){
@@ -1510,26 +1523,34 @@ function swissNextRound(){
   const played=new Set();S.matches.filter(m=>m.stage==='swiss'&&m.p1&&m.p2).forEach(m=>{played.add(m.p1+'|'+m.p2);played.add(m.p2+'|'+m.p1)});
   let pool = (done===0 ? S.players.slice().sort((a,b)=>(a.seed||9)-(b.seed||9)).map(p=>p.id) : swissStandings().map(x=>x.id)).filter(id=>!(S.out||[]).includes(id));
   let bye=null;
-  if(pool.length%2){for(let i=pool.length-1;i>=0;i--){if(!(S.byes||[]).includes(pool[i])){bye=pool[i];break}}if(!bye)bye=pool[pool.length-1];pool=pool.filter(x=>x!==bye)}
+  if(pool.length%2){const nb=id=>(S.byes||[]).filter(x=>x===id).length;bye=pool.reduce((b,id)=>nb(id)<=nb(b)?id:b,pool[pool.length-1]);pool=pool.filter(x=>x!==bye)}
   let pairs;
   if(done===0){pairs=[];const h=pool.length/2;for(let i=0;i<h;i++)pairs.push([pool[i],pool[i+h]])}
-  else pairs=swissPair(pool,played)||fallbackPair(pool);
+  else{
+    // הסיבוב הבא: כל השחקנים חוץ מאחד מאלה עם הכי מעט Bye (כשמספר השחקנים אי-זוגי)
+    const all=bye?[...pool,bye]:pool,nb=id=>(S.byes||[]).filter(x=>x===id).length+(id===bye?1:0),mb=Math.min(...all.map(nb));
+    const nextPools=bye?all.filter(id=>nb(id)===mb).map(x=>all.filter(y=>y!==x)):[pool];
+    pairs=swissPair(pool,played,done+1<S.settings.swissRounds?pp=>{const pl=new Set(played);pp.forEach(([x,y])=>{pl.add(x+'|'+y);pl.add(y+'|'+x)});return nextPools.some(np=>!!swissPair(np,pl,null,5000))}:null)||fallbackPair(pool)}
+  const rem=pairs.filter(([a,b])=>played.has(a+'|'+b));
+  if(rem.length){const t=`שימו לב: בסיבוב ${done+1} יש משחק חוזר (${rem.map(([a,b])=>pname(a)+' – '+pname(b)).join(', ')}). אין זיווג אחר אפשרי.`;logEv(t,'round');setTimeout(()=>toast(t),0)}
   pairs.forEach(([a,b])=>S.matches.push(newMatch({stage:'swiss',round:done+1,p1:a,p2:b})));
   if(bye){S.byes=(S.byes||[]).concat(bye);const m=newMatch({stage:'swiss',round:done+1,p1:bye,p2:null});m.status='done';m.winner=bye;m.bye=true;S.matches.push(m);logEv(pname(bye)+' קיבל/ה בוחן (Bye) בסיבוב '+(done+1))}
   logEv('נוצר סיבוב '+(done+1),'round');
   return pairs.length;
 }
-function swissPair(pool,played,depth){
-  if(!pool.length)return [];
-  if((depth||0)>400)return null;
-  const a=pool[0];
-  for(let i=1;i<pool.length;i++){
-    const b=pool[i];if(played.has(a+'|'+b))continue;
-    const rest=swissPair(pool.filter((x,j)=>j!==0&&j!==i),played,(depth||0)+1);
-    if(rest)return [[a,b],...rest];
-  }
-  return null;
+// accept: כשיש עוד סיבוב, זיווג מתקבל רק אם גם בסיבוב הבא יש זיווג בלי משחק חוזר (עם 6 שחקנים בלי זה נתקעים ב-15% מהתחרויות)
+function swissPair(pool,played,accept,lim){
+  let full=0,steps=0,first=null;lim=lim||200000;
+  const go=(rest,acc)=>{
+    if(!rest.length){full++;if(!first)first=acc.slice();return !accept||full>300||accept(acc)?acc.slice():null}
+    if(++steps>lim)return null;
+    const a=rest[0];
+    for(let i=1;i<rest.length;i++){const b=rest[i];if(played.has(a+'|'+b))continue;acc.push([a,b]);const r=go(rest.filter((x,j)=>j!==0&&j!==i),acc);acc.pop();if(r||steps>lim)return r}
+    return null};
+  // אף זיווג לא עבר את בדיקת הסיבוב הבא: לוקחים את הראשון שנמצא (עדיין בלי משחק חוזר עכשיו)
+  return go(pool,[])||first;
 }
+function swissMaxRounds(n){return Math.max(1,n-1)}
 function fallbackPair(pool){const out=[];for(let i=0;i<pool.length-1;i+=2)out.push([pool[i],pool[i+1]]);return out}
 function swissTab(){
   const st=swissStandings();const r=swissRoundsDone();const ms=S.matches.filter(m=>m.stage==='swiss');
@@ -1545,7 +1566,7 @@ function swissTab(){
 function startAmericano(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
-  americanoRound(1);logEv(`התחיל ${SYSTEMS[sys()].n} — ${S.settings.rounds} סיבובים, עד ${S.settings.target} נק׳`,'start');goto('live');if(S.settings.auto)autoDistribute();
+  americanoRound(1);logEv(`התחיל ${SYSTEMS[sys()].n} — ${S.settings.rounds} סיבובים, ${S.settings.target} נק׳ בכל משחק`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function amStandings(){
   const st={};S.players.forEach(p=>st[p.id]={id:p.id,pts:0,against:0,g:0,w:0});
@@ -1593,6 +1614,13 @@ function americanoRound(r){
   logEv('נוצר סיבוב '+r,'round');
   return 1;
 }
+// אמריקנו/מקסיקנו: מי שיצא לא נשאר במשחק שלו. מי שנח בסיבוב נכנס במקומו; אם אין מי שנח, המשחק מתבטל והשאר נחים
+function amWithdraw(pid){
+  for(const m of S.matches.filter(x=>x.stage==='round'&&x.status!=='done'&&matchPids(x).includes(pid))){const sub=(S.sitOut||[]).find(id=>id!==pid&&!(S.out||[]).includes(id));
+    if(sub){m.t1=m.t1.map(x=>x===pid?sub:x);m.t2=m.t2.map(x=>x===pid?sub:x);S.sitOut=S.sitOut.filter(x=>x!==sub);logEv(`${pname(sub)} נכנס/ה במקום ${pname(pid)} (${sideName(m,1)} – ${sideName(m,2)})`)}
+    else{const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;S.matches=S.matches.filter(x=>x!==m);S.sitOut=[...(S.sitOut||[]),...matchPids(m).filter(x=>x!==pid)];logEv(`המשחק ${sideName(m,1)} – ${sideName(m,2)} בוטל כי ${pname(pid)} יצא/ה`)}}
+  S.sitOut=(S.sitOut||[]).filter(x=>x!==pid)}
+function sitLine(){const sit=isTeamSys()&&!S.koBuilt?(S.sitOut||[]).filter(id=>P(id)&&!(S.out||[]).includes(id)):[];return sit.length&&amRoundsDone()?`<div class="hint" style="margin:8px 0">🪑 נחים בסיבוב ${amRoundsDone()}: ${sit.map(id=>esc(pname(id))).join(', ')}</div>`:''}
 function amRoundsDone(){const ms=S.matches.filter(m=>m.stage==='round');return ms.length?Math.max(...ms.map(m=>m.round)):0}
 function amTab(){
   const st=amStandings();const r=amRoundsDone();const ms=S.matches.filter(m=>m.stage==='round');
@@ -1607,7 +1635,7 @@ function amTab(){
 /* ========================= KING OF THE TABLE ========================= */
 function startKing(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
-  S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';S.kingCrowns={};S.kingHolders={};
+  S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';S.kingCrowns={};S.kingHolders={};S.kingDone=false;
   S.kingQueue=shuffle(S.players.map(p=>p.id));
   logEv(`התחיל מלך השולחן — עד ${S.settings.kingTarget} נק׳`,'start');goto('live');kingFill();commit();
 }
@@ -1626,12 +1654,14 @@ function kingFill(){
     const m=newMatch({stage:'king',p1:a,p2:b,target:S.settings.kingTarget,score:null});
     S.matches.push(m);startOn(t,m);n++;
   }
+  if(n)S.kingDone=false;
   return n;
 }
+function kingStandings(){const cr=S.kingCrowns||{};
+  return S.players.map(p=>({id:p.id,w:cr[p.id]||0,g:S.matches.filter(m=>m.stage==='king'&&m.status==='done'&&matchPids(m).includes(p.id)).length}))
+    .sort((a,b)=>b.w-a.w||a.g-b.g||pname(a.id).localeCompare(pname(b.id)))}
 function kingTab(){
-  const cr=S.kingCrowns||{};
-  const st=S.players.map(p=>({id:p.id,w:cr[p.id]||0,g:S.matches.filter(m=>m.stage==='king'&&m.status==='done'&&matchPids(m).includes(p.id)).length}))
-    .sort((a,b)=>b.w-a.w||a.g-b.g||pname(a.id).localeCompare(pname(b.id)));
+  const st=kingStandings();
   const done=S.matches.filter(m=>m.stage==='king'&&m.status==='done');
   return `<div class="card"><h2>מלכים</h2>
   <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>ניצחונות</th><th>משחקים</th><th>אחוז</th></tr>
@@ -1639,7 +1669,7 @@ function kingTab(){
   <div class="card" style="margin-top:12px"><h2>התור (${(S.kingQueue||[]).length})</h2><div class="row" style="gap:6px;margin-top:6px">${(S.kingQueue||[]).map((id,i)=>`<span class="pill">${i+1}. ${esc(pname(id))}</span>`).join('')||'<span class="muted">ריק</span>'}</div></div>
   <div class="card" style="margin-top:12px"><h2>משחקים אחרונים</h2><ul class="matchlist">${done.slice().reverse().slice(0,25).map(m=>`<li><span>${esc(sideName(m,m.winSide||1))} <span class="tiny">ניצח/ה את</span> ${esc(sideName(m,m.winSide===1?2:1))}</span><span class="sc">${esc((m.score||[]).join(':'))}</span></li>`).join('')||'<li class="muted">עדיין אין</li>'}</ul></div>`;
 }
-function endKing(){if(!confirm('לסיים את מלך השולחן ולעבור לפודיום?'))return;S.matches.filter(m=>m.stage==='king'&&m.status==='playing').forEach(m=>{const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)]});S.matches=S.matches.filter(m=>!(m.stage==='king'&&m.status!=='done'));goto('final')}
+function endKing(){if(!confirm('לסיים את מלך השולחן ולעבור לפודיום?'))return;S.kingDone=true;S.matches.filter(m=>m.stage==='king'&&m.status==='playing').forEach(m=>{const t=S.tables.find(x=>x.matchId===m.id);if(t)t.matchId=null;S.kingQueue=[m.p2,...S.kingQueue.filter(x=>x!==m.p2)]});S.matches=S.matches.filter(m=>!(m.stage==='king'&&m.status!=='done'));goto('final')}
 
 /* ========================= KNOCKOUT ========================= */
 function seedSlots(n){let a=[1];while(a.length<n){const m=a.length*2+1;const b=[];for(const x of a){b.push(x,m-x)}a=b}return a}// slot order: position i -> seed number
@@ -1822,14 +1852,16 @@ function exportLog(){
 /* ========================= FINAL ========================= */
 function finalRanking(){
   const sy=sys();
-  if(isTeamSys()){const st=amStandings();let place=1;return st.map((x,i)=>{if(i>0&&st[i-1].pts!==x.pts)place=i+1;return {p:P(x.id),place,shared:st.filter(y=>y.pts===x.pts).length>1,extra:x.pts+' נק׳'}})}
-  if(sy==='king'){const cr=S.kingCrowns||{};const st=S.players.map(p=>({p,w:cr[p.id]||0})).sort((a,b)=>b.w-a.w);let place=1;return st.map((x,i)=>{if(i>0&&st[i-1].w!==x.w)place=i+1;return {p:x.p,place,shared:st.filter(y=>y.w===x.w).length>1,extra:x.w+' ניצחונות'}})}
+  // אותו סדר ואותם שוברי שוויון כמו בטבלה החיה; "=" רק כשהכול שווה
+  const tied=(st,k,f)=>{let place=1;return st.map((x,i)=>{if(i>0&&k(st[i-1])!==k(x))place=i+1;return Object.assign({place,shared:st.filter(y=>k(y)===k(x)).length>1},f(x))})};
+  if(isTeamSys())return tied(amStandings(),x=>[x.pts,x.w,x.pts-x.against].join(),x=>({p:P(x.id),extra:x.pts+' נק׳'}));
+  if(sy==='king')return tied(kingStandings(),x=>x.w+'/'+x.g,x=>({p:P(x.id),extra:x.w+' ניצחונות'}));
   if(sy==='swiss'&&!S.koBuilt){const st=swissStandings();return st.map((x,i)=>({p:P(x.id),place:i+1,shared:false,extra:x.mp+' נק׳'}))}
   if(sy==='swiss'&&S.koBuilt){
     const st=swissStandings();const main=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='main'&&!m.third);
     const fin=main.find(m=>m.koRound===S.koRounds-1);
     const elim={};main.forEach(m=>{if(m.status!=='done'||m.bye)return;const l=m.winner===m.p1?m.p2:m.p1;if(l)elim[l]=m.koRound});
-    const tier=id=>{if(fin&&fin.winner===id)return 0;if(fin&&fin.status==='done'&&(fin.p1===id||fin.p2===id))return 1;if(elim[id]!=null)return 10+(S.koRounds-elim[id]);return 100};
+    const tier=id=>{if(fin&&fin.winner===id)return 0;if(fin&&fin.status==='done'&&(fin.p1===id||fin.p2===id))return 1;if(elim[id]!=null)return 10+(S.koRounds-elim[id]);return 100+st.findIndex(x=>x.id===id)};
     const ord=S.players.slice().sort((a,b)=>tier(a.id)-tier(b.id)||st.findIndex(x=>x.id===a.id)-st.findIndex(x=>x.id===b.id));
     let place=1;return ord.map((p,i)=>{if(i>0&&tier(ord[i-1].id)!==tier(p.id))place=i+1;return {p,place,shared:ord.filter(x=>tier(x.id)===tier(p.id)).length>1&&tier(p.id)>1,extra:''}});
   }
@@ -1884,7 +1916,7 @@ function shareSummary(){
 function exportCSV(){
   const rows=[['מקום','שם','מועדון','בית']];finalRanking().forEach(x=>rows.push([x.place,x.p.name,x.p.club||'',S.groups.find(g=>g.pids.includes(x.p.id))?.name||'']));
   rows.push([]);rows.push(['שלב','בית/סיבוב','שחקן 1','שחקן 2','מערכות','פירוט','מנצח']);
-  S.matches.filter(m=>m.status==='done'&&!m.bye).forEach(m=>rows.push([({group:'בתים',ko:'נוקאאוט',swiss:'שוויצרית',round:'סיבוב',king:'מלך השולחן'})[m.stage]||m.stage,matchLabel(m),sideName(m,1),sideName(m,2),m.score?m.score.join(':'):setsWon(m).join(':'),m.score?'':(m.sets||[]).map(x=>x.join('-')).join(' '),m.score?sideName(m,m.winSide||1):pname(m.winner)+(m.wo?' (טכני)':'')]));
+  S.matches.filter(m=>m.status==='done'&&!m.bye).forEach(m=>rows.push([({group:'בתים',ko:'נוקאאוט',swiss:'שוויצרית',round:'סיבוב',king:'מלך השולחן'})[m.stage]||m.stage,matchLabel(m),sideName(m,1),sideName(m,2),m.score?m.score.join(':'):setsWon(m).join(':'),m.score?'':(m.sets||[]).map(x=>x.join('-')).join(' '),m.score?(m.winSide===0?'תיקו':sideName(m,m.winSide||1)):pname(m.winner)+(m.wo?' (טכני)':'')]));
   const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   dl(new Blob([csv],{type:'text/csv;charset=utf-8'}),(S.settings.name||'tournament')+'.csv');
 }
@@ -1906,7 +1938,9 @@ window.addEventListener('fb-ready',()=>{
     if(u){try{const d=await FB.getDoc(FB.doc(FB.db,'users',u.uid));PROFILE=d.exists()?d.data():null}catch(e){PROFILE=null}}
     if(unsubList){unsubList();unsubList=null}
     closeTournament(true);
-    if(u&&PROFILE)watchList();
+    if(u&&PROFILE){watchList();
+      // רענון או עדכון גרסה: חוזרים לתחרות שהייתה פתוחה במכשיר הזה, לא לרשימה
+      let last=null;try{last=localStorage.getItem(KEY+'.last')}catch(e){}if(last){openTournament(last);return}}
     render();});
 });
 function watchList(){
@@ -1923,6 +1957,8 @@ function renderLogin(app){
 }
 async function doLogin(){const e=document.getElementById('lg_e').value.trim(),p=document.getElementById('lg_p').value;const err=document.getElementById('lg_err');err.style.display='none';try{await FB.signIn(e,p)}catch(x){err.style.display='block';err.textContent='הכניסה נכשלה — בדקו אימייל וסיסמה.'}}
 const PHASE_NAMES={setup:'הגדרות',players:'רישום',draw:'הגרלה',live:'המשחקים רצים',ko:'נוקאאוט',final:'הסתיימה'};
+// השלב לפי הנתונים (לרשימת התחרויות ולמכשיר שפותח את התחרות בפעם הראשונה), לא לפי המסך שפתוח במכשיר מסוים
+function progPhase(){if(canFinish())return 'final';if(S.koBuilt)return 'ko';if(S.matches.length)return 'live';if(S.groups.length&&sys()==='groups-ko')return 'draw';return S.players.length?'players':'setup'}
 function fmtDate(d){if(!d)return '';const x=new Date(d+'T12:00');if(isNaN(x))return d;const o={weekday:'long',day:'numeric',month:'long'};if(x.getFullYear()!==new Date().getFullYear())o.year='numeric';return x.toLocaleDateString('he-IL',o)}
 function tMeta(t){return [fmtDate(t.date),`${t.playersCount||0} שחקנים`,PHASE_NAMES[t.phase]||''].filter(Boolean).join(' · ')}
 // התחרות שמוצגת בגדול: זו שרצה עכשיו, אחרת הקרובה שעוד לא הסתיימה
@@ -1949,49 +1985,84 @@ function renderList(app){
 function canDelete(){if(!PROFILE)return false;const perms=Array.isArray(PROFILE.permissions)?PROFILE.permissions:[];return String(PROFILE.role||'').toLowerCase()==='admin'||perms.includes('competitions')}
 async function newTournament(){
   const id=uid()+uid();S=fresh();S.rev=0;TID=id;CLOUD_REV=null;logEv('נפתחה תחרות חדשה','create');
-  const ok=await pushCloud(true);
-  openTournament(id);
+  const ok=await pushCloud(true);if(!ok)PENDING_NEW=id;
+  openTournament(id);localView=true;
   if(!ok)setTimeout(diagnostics,400);
 }
 async function openTournament(id){
   TID=id;const cached=localStorage.getItem(KEY+'.'+id);if(cached){try{S=Object.assign(fresh(),JSON.parse(cached))}catch(e){}}
+  localView=!!cached;lastSig=stSig();try{localStorage.setItem(KEY+'.last',id)}catch(e){}
   CLOUD_REV=null;try{const b=localStorage.getItem(KEY+'.'+id+'.base');if(b!==null&&b!==''&&!isNaN(+b))CLOUD_REV=+b}catch(e){}
   const ref=FB.doc(FB.db,'tournaments',id);
   if(unsubT)unsubT();
   unsubT=FB.onSnapshot(ref,snap=>{
-    if(!snap.exists()){closeTournament();toast('התחרות נמחקה');return}
+    if(!snap.exists()){if(id===PENDING_NEW)return;closeTournament();toast('התחרות נמחקה');return}
     const d=snap.data();if(!d.state)return;
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
-    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=Math.max(S.rev||0,d.rev||0);setBase(id,d.rev||0);localStorage.setItem(KEY+'.'+id,d.state);closeModal();render()}catch(e){console.error(e)}}
+    if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{applyCloud(id,d.state,Math.max(S.rev||0,d.rev||0),d.rev||0)}catch(e){console.error(e)}}
     else if((d.rev||0)<(S.rev||0)){scheduleCloud()}
     setSync('saved');
   },e=>{console.error(e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('אין גישה לענן. עובדים מהמכשיר.',{label:'בדיקה',fn:diagnostics})}});
   render();
 }
-function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent)render()}
+function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent){try{localStorage.removeItem(KEY+'.last')}catch(e){}render()}}
+// מצב מהענן: הלשונית והמסך נשארים של המכשיר הזה; חלון תוצאה פתוח נסגר רק אם המשחק שבו השתנה; מה שמוקלד במסך נשאר
+let localView=false,openMid=null;
+function applyCloud(tid,state,rev,base){
+  const st=JSON.parse(state);const old=S,om=openMid&&JSON.stringify(old.matches.find(x=>x.id===openMid));
+  S=Object.assign(fresh(),st);S.rev=rev;
+  if(localView){S.tab=old.tab;S.phase=old.phase}else{S.phase=progPhase();localView=true}
+  // מכשיר אחר התחיל את התחרות: מי שעומד במסכי ההכנה עובר למשחקים (רק המעבר הזה, לא כל לחיצה)
+  if(!old.matches.length&&S.matches.length&&['setup','players','draw'].includes(S.phase))S.phase='live';
+  setBase(tid,base);lastSig=stSig();try{localStorage.setItem(KEY+'.'+tid,JSON.stringify(S))}catch(e){}
+  if(openMid&&JSON.stringify(S.matches.find(x=>x.id===openMid))!==om){closeModal();toast('המשחק שפתחת עודכן במכשיר אחר')}
+  const ae=document.activeElement,fid=ae&&ae.id&&ae.closest('#app')?ae.id:null;
+  const dirty=[...document.querySelectorAll('#app [data-dirty]')].map(e=>[e.id,e.value]);
+  render(true);
+  dirty.forEach(([id,v])=>{const e=document.getElementById(id);if(e&&!e.disabled){e.value=v;e.dataset.dirty=1}});
+  if(fid){const e=document.getElementById(fid);if(e)e.focus({preventScroll:true})}
+}
+document.addEventListener('input',e=>{const t=e.target;if(t.id&&t.closest&&t.closest('#app'))t.dataset.dirty=1},true);
 let syncState='idle',syncErr=null,retryN=0,retryT=null,warnedOnce=false;
 /* מניעת "עדכון אבוד": CLOUD_REV הוא ה-rev של הגרסה בענן שהמצב המקומי כבר כולל (קיבלנו אותה או כתבנו אותה).
    השמירה נעשית בטרנזקציה: אם בענן יש בינתיים גרסה של מכשיר אחר שלא ראינו — לא דורסים אותה.
    במקום זה מקבלים את גרסת הענן, שומרים את הגרסה המקומית כגיבוי (localStorage + כפתור הורדה) ומבקשים להזין שוב.
    מיזוג אוטומטי ברמת משחק לא נעשה בכוונה: משחק אחד משפיע על שולחנות, תור, עץ נוקאאוט וסיבובים הבאים,
    ומיזוג חלקי עלול לייצר מצב שבור. */
-let CLOUD_REV=null;
+let CLOUD_REV=null,PENDING_NEW=null;
 function setBase(id,rev){if(id===TID)CLOUD_REV=rev;try{localStorage.setItem(KEY+'.'+id+'.base',String(rev))}catch(e){}}
-function onCloudConflict(tid,d,pushed){
-  // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
-  const open=TID===tid;const mine=open?JSON.stringify(S):pushed;let nm='tournament';try{nm=JSON.parse(mine).settings.name||nm}catch(e){}
+function onCloudConflict(tid,d,pushed,base){
+  // הגרסה המקומית נשמרת כגיבוי: אם התחרות עדיין פתוחה ועדיין על אותה גרסה — המצב הנוכחי (כולל מה שהוזן בזמן השמירה), אחרת מה שניסינו לשמור.
+  const open=TID===tid;let mine=open&&CLOUD_REV===base?JSON.stringify(S):pushed;
+  // גיבוי קודם שעוד לא הוחזר לא נדרס: תוצאה שהייתה בו וחסרה בחדש נשארת
+  try{const o=JSON.parse(localStorage.getItem(KEY+'.'+tid+'.conflict')||'null');if(o&&o.matches){const n=JSON.parse(mine);n.matches=n.matches.map(x=>{const y=o.matches.find(z=>z.id===x.id);return y&&y.status==='done'&&x.status!=='done'?y:x});mine=JSON.stringify(n)}}catch(e){}
   try{localStorage.setItem(KEY+'.'+tid+'.conflict',mine)}catch(e){}
   const offer={label:'החזר את השינויים שלי',fn:()=>restoreMine(tid)};
   if(!open){toast('עודכן ממכשיר אחר — הזן שוב',offer);return}
   clearTimeout(cloudT);cloudT=null;
-  try{const st=JSON.parse(d.state);S=Object.assign(fresh(),st);S.rev=d.rev||0;setBase(tid,d.rev||0);localStorage.setItem(KEY+'.'+tid,d.state)}catch(e){console.error(e)}
-  setSync('saved');closeModal();render();
+  try{applyCloud(tid,d.state,d.rev||0,d.rev||0)}catch(e){console.error(e)}
+  setSync('saved');
   toast('עודכן ממכשיר אחר — הזן שוב',offer);
 }
 // שחזור השינויים שהמכשיר הזה עשה בזמן שהענן כבר עודכן ממכשיר אחר. לא דורסים אוטומטית: המשתמש בוחר.
-function restoreMine(tid){const raw=localStorage.getItem(KEY+'.'+tid+'.conflict');if(!raw)return;if(TID!==tid){toast('פתחו את התחרות ולחצו שוב');return}
-  try{S=Object.assign(fresh(),JSON.parse(raw));S.rev=CLOUD_REV||S.rev;localStorage.removeItem(KEY+'.'+tid+'.conflict');commit();toast('השינויים שלך הוחזרו')}catch(e){toast('לא הצלחנו לשחזר')}}
+// מחזירים רק תוצאות שחסרות בענן, דרך המנוע הרגיל (שולחנות, תור, עץ). משחק שכבר הוזן במכשיר השני לא נדרס.
+function mineOf(tid){try{const m=JSON.parse(localStorage.getItem(KEY+'.'+tid+'.conflict')||'null');return m&&m.matches?m:null}catch(e){return null}}
+function sameRes(a,b){return !!a&&!!b&&a.status===b.status&&a.winner===b.winner&&JSON.stringify(a.sets||[])===JSON.stringify(b.sets||[])&&JSON.stringify(a.score||null)===JSON.stringify(b.score||null)}
+function lostMatches(mine){return mine.matches.filter(x=>x.status==='done'&&!x.bye&&!sameRes(x,S.matches.find(y=>y.id===x.id))).sort((a,b)=>(a.endedAt||0)-(b.endedAt||0))}
+function canRestore(x){const c=S.matches.find(y=>y.id===x.id);return !!c&&c.status!=='done'&&matchPids(c).join()===matchPids(x).join()}
+function dropConflict(){try{localStorage.removeItem(KEY+'.'+TID+'.conflict')}catch(e){}render()}
+function restoreMine(tid){const mine=mineOf(tid);if(!mine)return;if(TID!==tid){toast('פתחו את התחרות ולחצו שוב');return}
+  hideToast();let n=0;
+  for(const x of lostMatches(mine)){if(!canRestore(x))continue;const c=S.matches.find(y=>y.id===x.id);n++;
+    if(isPointGame(c))finishPoint(c,x.score,x.winSide,true);else finishMatch(c,x.winner,x.sets,{wo:!!x.wo,retired:x.retired||null},true)}
+  const left=lostMatches(mine).length;if(!left)try{localStorage.removeItem(KEY+'.'+tid+'.conflict')}catch(e){}
+  commit();toast(n?`הוחזרו ${n} תוצאות`+(left?`. ${left} משחקים עודכנו גם במכשיר השני, בדקו אותם`:''):'לא היה מה להחזיר: המשחקים כבר עודכנו במכשיר השני')}
+// באנר קבוע (לא רק הודעה ל-10 שניות): אילו תוצאות מהמכשיר הזה חסרות בענן
+function conflictBanner(){const mine=mineOf(TID);if(!mine)return '';const lost=lostMatches(mine);if(!lost.length){try{localStorage.removeItem(KEY+'.'+TID+'.conflict')}catch(e){}return ''}
+  return `<div class="err-box" style="margin-bottom:12px"><b>⚠️ ${lost.length} תוצאות שהוזנו במכשיר הזה לא נשמרו בענן</b> (מכשיר אחר שמר באותו זמן):
+  <ul style="margin:6px 0;padding-right:18px">${lost.map(x=>`<li>${esc(sideName(x,1))} – ${esc(sideName(x,2))}: ${esc(x.score?x.score.join(':'):(x.sets||[]).map(s=>s.join('-')).join(', '))}${canRestore(x)?'':' <span class="tiny">(המשחק כבר עודכן במכשיר השני, בדקו ידנית)</span>'}</li>`).join('')}</ul>
+  <div class="row">${lost.some(canRestore)?'<button class="primary" onclick="restoreMine(TID)">החזר את מה שחסר</button>':''}<button class="ghost" onclick="dropConflict()">הסתר</button></div></div>`}
 function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeout(()=>pushCloud(),400)}
 /* שמירות לענן רצות אחת אחרי השנייה (לא במקביל): שמירה איטית שנשלחה קודם לא יכולה לנחות אחרי שמירה חדשה יותר
    של אותו מכשיר ולהחזיר את הענן אחורה. התוכן נלכד ברגע הקריאה; שמירה שממתינה בתור מתעדכנת לתוכן האחרון. */
@@ -2000,26 +2071,27 @@ function pushCloud(force){
   if(!TID||!USER)return Promise.resolve(false);cloudT=null;clearTimeout(retryT);
   if(!navigator.onLine){setSync('offline');scheduleRetry();return Promise.resolve(false)}
   setSync('saving');
-  const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:S.phase,playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
+  const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:progPhase(),playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
   if(force)body.createdBy=USER.uid;
-  if(S.settings.publicLink)body.publicLink=true;
-  const tid=TID;const queued=pushQ.get(tid);
-  if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;return queued.p}
-  const job={tid,body};pushQ.set(tid,job);
+  body.publicLink=!!S.settings.publicLink;
+  // הגרסה שעליה התוכן מבוסס נלכדת יחד עם התוכן, ולא בזמן השליחה (אחרת התנגשות קודמת "מכשירה" תוכן ישן ודורסת מכשיר אחר)
+  const tid=TID;const queued=pushQ.get(tid);const base=baseFor(tid);
+  if(queued){if(queued.body.createdBy&&!body.createdBy)body.createdBy=queued.body.createdBy;queued.body=body;queued.base=base;return queued.p}
+  const job={tid,body,base};pushQ.set(tid,job);
   job.p=pushChain.then(()=>{pushQ.delete(tid);return pushOnce(job)});
   pushChain=job.p.catch(()=>false);
   return job.p;
 }
 function baseFor(tid){if(tid===TID)return CLOUD_REV;try{const b=localStorage.getItem(KEY+'.'+tid+'.base');if(b!==null&&b!==''&&!isNaN(+b))return +b}catch(e){}return null}
 async function pushOnce(job){
-  const {tid,body}=job;const rev=body.rev,base=baseFor(tid),ref=FB.doc(FB.db,'tournaments',tid);
+  const {tid,body,base}=job;const rev=body.rev,ref=FB.doc(FB.db,'tournaments',tid);
   try{
     let res=null;
     if(!FB.runTransaction){await FB.setDoc(ref,body,{merge:true})}
     else{
       res=await FB.runTransaction(FB.db,async tx=>{
         const snap=await tx.get(ref);
-        if(snap.exists()){const d=snap.data();const rr=d.rev||0;
+        if(snap.exists()){const d=snap.data();const rr=d.rev||0;job.wasPublic=!!d.publicLink;
           // הגרסה בענן היא של המכשיר הזה וחדשה יותר ממה שבידינו — לא כותבים (זה היה מחזיר את הענן אחורה), ואין התנגשות.
           if(d.client===CLIENT&&rr>rev)return {stale:rr};
           // מותר לכתוב: אין עדיין מצב בענן, או שהגרסה בענן היא שלנו, או שלא נוספה גרסה אחרי זו שאנחנו מכירים.
@@ -2028,12 +2100,13 @@ async function pushOnce(job){
           if(!ok)return {conflict:d};}
         tx.set(ref,body,{merge:true});return null;
       });
-      if(res&&res.conflict){retryN=0;syncErr=null;onCloudConflict(tid,res.conflict,body.state);return false}
+      if(res&&res.conflict){retryN=0;syncErr=null;onCloudConflict(tid,res.conflict,body.state,base);return false}
     }
     const b=res&&res.stale!=null?res.stale:rev;const cur=baseFor(tid);
     if(cur==null||b>cur)setBase(tid,b);
-    retryN=0;syncErr=null;if(!pushQ.size&&!cloudT)setSync('saved');
+    retryN=0;syncErr=null;if(tid===PENDING_NEW)PENDING_NEW=null;if(!pushQ.size&&!cloudT)setSync('saved');
     if(body.publicLink)FB.setDoc(FB.doc(FB.db,'tournamentsPublic',tid),{name:body.name,phase:body.phase,updatedAt:body.updatedAt,state:JSON.stringify(publicState(JSON.parse(body.state)))}).catch(e=>console.error('public',e));
+    else if(job.wasPublic)pubOff(tid);
     return true;
   }catch(e){
     console.error('pushCloud',e);syncErr=e;setSync('error');
@@ -2091,7 +2164,7 @@ async function diagnostics(){
   <div class="row" style="margin-top:16px"><button class="primary" onclick="closeModal();pushCloud().then(ok=>toast(ok?'נשמר בענן':'עדיין לא נשמר'))">נסה לשמור עכשיו</button>
   <button onclick="exportJSON()">הורדת גיבוי</button><button class="ghost" onclick="closeModal()">סגור</button></div>`);
 }
-async function deleteTournament(){const id=TID,name=S.settings.name||'ללא שם';if(!id)return;if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;clearTimeout(cloudT);cloudT=null;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));localStorage.removeItem(KEY+'.'+id);closeTournament(true);render();toast('התחרות נמחקה')}catch(e){toast('המחיקה נכשלה');scheduleCloud()}}
+async function deleteTournament(){const id=TID,name=S.settings.name||'ללא שם';if(!id)return;if(!confirm(`למחוק את "${name}"?`))return;if(!confirm('בטוח? המחיקה סופית.'))return;clearTimeout(cloudT);cloudT=null;try{await FB.deleteDoc(FB.doc(FB.db,'tournaments',id));pubOff(id);localStorage.removeItem(KEY+'.'+id);localStorage.removeItem(KEY+'.last');closeTournament(true);render();toast('התחרות נמחקה')}catch(e){toast('המחיקה נכשלה');scheduleCloud()}}
 /* import players from attendance app */
 async function importFromClub(){
   modal('<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">טוען…</p>');
@@ -2102,18 +2175,22 @@ async function importFromClub(){
     const byG={};players.forEach(p=>(byG[groups[p.groupId]||'ללא קבוצה']=byG[groups[p.groupId]||'ללא קבוצה']||[]).push(p));
     modal(`<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">סמנו את המשתתפים. שם הקבוצה נשמר כ"מועדון" — כך ההגרלה מפרידה חברי קבוצה לבתים שונים.</p>
     <div style="max-height:55vh;overflow:auto">${Object.entries(byG).map(([g,list])=>`<div style="margin-top:10px"><label class="chip" style="font-weight:700"><input type="checkbox" onchange="this.closest('div').querySelectorAll('.pi').forEach(c=>c.checked=this.checked)">${esc(g)} (${list.length})</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${esc(p.id)}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${S.players.some(x=>x.name===p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${esc(p.id)}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${hasName(p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" onclick="doImport()">הוסף את המסומנים</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
   }catch(e){console.error(e);modal('<h2>ייבוא</h2><div class="err-box">לא הצלחתי לקרוא את רשימת השחקנים. בדקו הרשאות ב-Firestore.</div><div class="row" style="margin-top:12px"><button onclick="closeModal()">סגור</button></div>')}
 }
-function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled)').forEach(c=>{if(S.players.some(p=>p.name===c.dataset.name))return;S.players.push({id:uid(),name:c.dataset.name,club:c.dataset.club,seed:0,clubPlayerId:c.value});n++});closeModal();commit();toast(`נוספו ${n} שחקנים`)}
+function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled)').forEach(c=>{if(hasName(c.dataset.name))return;S.players.push({id:uid(),name:c.dataset.name,club:c.dataset.club,seed:0,clubPlayerId:c.value});n++});closeModal();commit();toast(`נוספו ${n} שחקנים`)}
 
 /* ========================= PUBLIC DISPLAY ========================= */
 /* ---------- קישור צפייה פתוח: עותק מקוצר של התחרות, בלי התחברות ---------- */
 const VIEW=new URLSearchParams(location.search).get('view');
 function viewLink(){return location.origin+location.pathname+'?view='+TID}
 // שם פרטי ואות של שם המשפחה, ובלי היומן (שמות מלאים בטקסט חופשי)
-function publicState(st){st.players=(st.players||[]).map(p=>{const w=String(p.name||'').trim().split(/\s+/);return Object.assign({},p,{name:w.length>1?w[0]+' '+w[w.length-1][0]+'.':w[0]||''})});st.log=[];return st}
+// בלי מועדון ובלי מזהה הילד באפליקציית הנוכחות. בזוג ("דני / יוסי") כל אחד מקוצר לחוד; שני שמות שיוצאים זהים מקבלים מספר
+function publicState(st){const short=n=>String(n||'').split('/').map(x=>{const w=x.trim().split(/\s+/);return w.length>1?w[0]+' '+w[w.length-1][0]+'.':w[0]||''}).join(' / ');const seen={};
+  st.players=(st.players||[]).map(p=>{let n=short(p.name);seen[n]=(seen[n]||0)+1;if(seen[n]>1)n+=' ('+seen[n]+')';return {id:p.id,name:n}});st.log=[];st.lastUndo=null;return st}
+// מחיקת העותק הציבורי. מי שאין לו הרשאת מחיקה מרוקן אותו (הקישור מציג "לא פעיל")
+function pubOff(tid){if(!tid)return Promise.resolve();const ref=FB.doc(FB.db,'tournamentsPublic',tid);return FB.deleteDoc(ref).catch(()=>FB.setDoc(ref,{name:'',phase:'',state:'',updatedAt:Date.now()})).catch(e=>console.error('public off',e))}
 function renderView(app){
   const done=canFinish();const r=done?finalRanking():[];
   const pod=done?`<div class="podium"><div class="pod p2"><div class="name">${esc(r[1]?.p.name||'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${esc(r[0]?.p.name||'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${esc(r[2]?.p.name||'')}</div><div class="block">3</div></div></div>`:'';
@@ -2125,7 +2202,7 @@ let pubTimer=null;
 let pubScreen=0;
 const PUB_SCREENS=['now','next','table','results'];
 function openPublic(){
-  pubScreen=0;pubDraw();
+  pubScreen=0;pubDraw();clearInterval(pubTimer);
   pubTimer=setInterval(()=>{pubScreen=(pubScreen+1)%PUB_SCREENS.length;pubDraw()},14000);
   if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
 }
@@ -2149,18 +2226,18 @@ function pubBody(sc){
   if(sc==='now'){
     body=`<div class="tables">${S.tables.map(t=>{const m=t.matchId?S.matches.find(x=>x.id===t.matchId):null;
       return m?`<div class="table"><div class="tnum"><span>שולחן ${esc(t.n)}</span><span>${esc(matchLabel(m))}</span></div><div class="players">${esc(sideName(m,1))}<span class="vs">נגד</span>${esc(sideName(m,2))}</div><div class="meta"></div></div>`
-      :`<div class="table free"><div class="tnum"><span>שולחן ${esc(t.n)}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>`;
+      :`<div class="table free"><div class="tnum"><span>שולחן ${esc(t.n)}</span></div><div class="free-lbl">פנוי</div><div class="meta"></div></div>`}).join('')}</div>${sitLine()}`;
   } else if(sc==='next'){
     body=`<div class="next"><h2>להתכונן — הבאים בתור</h2><ul style="padding:0;margin:0">${q.slice(0,8).map(x=>`<li><span>${esc(sideName(x.m,1))} נגד ${esc(sideName(x.m,2))}</span><small>${esc(matchLabel(x.m))}</small></li>`).join('')||'<li>אין משחקים ממתינים</li>'}</ul></div>`;
   } else if(sc==='results'){
     const dn=S.matches.filter(m=>m.status==='done'&&!m.bye).slice(-8).reverse();
-    body=`<div class="next"><h2>תוצאות אחרונות</h2><ul style="padding:0;margin:0">${dn.map(m=>`<li><span>${esc(sideName(m,m.winSide||(m.winner===sideIds(m,1)[0]?1:2)))} ניצח/ה</span><small>${esc(m.score?m.score.join(':'):setsWon(m).join(':'))} · ${esc(sideName(m,(m.winSide||(m.winner===sideIds(m,1)[0]?1:2))===1?2:1))}</small></li>`).join('')||'<li>עדיין אין תוצאות</li>'}</ul></div>`;
+    body=`<div class="next"><h2>תוצאות אחרונות</h2><ul style="padding:0;margin:0">${dn.map(m=>m.score&&m.score[0]===m.score[1]?`<li><span>${esc(sideName(m,1))} – ${esc(sideName(m,2))}</span><small>תיקו ${esc(m.score.join(':'))}</small></li>`:`<li><span>${esc(sideName(m,m.winSide||(m.winner===sideIds(m,1)[0]?1:2)))} ניצח/ה</span><small>${esc(m.score?m.score.join(':'):setsWon(m).join(':'))} · ${esc(sideName(m,(m.winSide||(m.winner===sideIds(m,1)[0]?1:2))===1?2:1))}</small></li>`).join('')||'<li>עדיין אין תוצאות</li>'}</ul></div>`;
   } else if(sc==='table'){
     const sy=sys();let rows=[];
     if(sy==='groups-ko'&&!S.koBuilt){rows=S.groups.map(g=>{const r=rankGroup(g.id);return `<div style="margin-bottom:14px"><h2 style="font-size:22px">${esc(g.name)}</h2>${r.order.map((id,i)=>`<div style="font-size:22px;padding:4px 0;display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.12)"><span>${i+1}. ${esc(pname(id))}</span><span>${r.stats[id].mp}</span></div>`).join('')}</div>`});
       body=`<div style="columns:${Math.min(3,S.groups.length)};column-gap:30px">${rows.join('')}</div>`;
     } else {
-      const st=sy==='swiss'?swissStandings().map(x=>[pname(x.id),x.mp+' נק׳']):isTeamSys()?amStandings().map(x=>[pname(x.id),x.pts+' נק׳']):sy==='king'?S.players.map(p=>[p.name,((S.kingCrowns||{})[p.id]||0)+' נצ׳']).sort((a,b)=>parseInt(b[1])-parseInt(a[1])):finalRanking().map(x=>[x.p.name,x.extra||'']);
+      const st=sy==='swiss'?swissStandings().map(x=>[pname(x.id),x.mp+' נק׳']):isTeamSys()?amStandings().map(x=>[pname(x.id),x.pts+' נק׳']):sy==='king'?kingStandings().map(x=>[pname(x.id),x.w+' נצ׳']):finalRanking().map(x=>[x.p.name,x.extra||'']);
       body=`<div class="next"><h2>טבלה</h2><ul style="padding:0;margin:0">${st.slice(0,12).map((x,i)=>`<li><span>${i+1}. ${esc(x[0])}</span><small>${esc(x[1])}</small></li>`).join('')}</ul></div>`;
     }
   } else if(sc==='podium'){
@@ -2172,8 +2249,8 @@ function pubBody(sc){
 function closePublic(){clearInterval(pubTimer);document.getElementById('public').innerHTML='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}
 
 /* ========================= UI helpers ========================= */
-function modal(html){document.getElementById('modal').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`}
-function closeModal(){document.getElementById('modal').innerHTML=''}
+function modal(html){openMid=null;document.getElementById('modal').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`}
+function closeModal(){openMid=null;document.getElementById('modal').innerHTML=''}
 let toastT=null;
 function toast(msg,action){const t=document.getElementById('toast');t.innerHTML=`<div class="toast"><span>${esc(msg)}</span>${action?`<button id="toastBtn">${action.label}</button>`:''}</div>`;if(action)document.getElementById('toastBtn').onclick=action.fn;clearTimeout(toastT);toastT=setTimeout(hideToast,action?10000:3000)}
 function hideToast(){document.getElementById('toast').innerHTML=''}
