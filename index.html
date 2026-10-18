@@ -710,10 +710,10 @@ function keepSetup(){
     if(q('s_swr'))s.swissRounds=Math.max(1,+q('s_swr').value||5);
     if(q('s_rounds'))s.rounds=Math.max(1,+q('s_rounds').value||6);
     if(q('s_target'))s.target=+q('s_target').value; if(q('s_king'))s.kingTarget=+q('s_king').value;}
-  s.tables=Math.max(1,+q('s_tables').value||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
+  s.tables=Math.max(1,Math.round(+q('s_tables').value)||1);s.restMin=+((q('s_rest')||q('s_rest2')||{value:s.restMin}).value)||0;
 }
 function syncTables(){
-  const n=S.settings.tables;const before=S.tables.length;
+  const n=S.settings.tables=Math.max(1,Math.round(+S.settings.tables)||1);const before=S.tables.length;
   while(S.tables.length<n)S.tables.push({n:S.tables.length+1,lock:null,matchId:null,note:''});
   if(S.tables.length>n){const extra=S.tables.slice(n);if(extra.some(t=>t.matchId)){toast('יש שולחנות בשימוש. סיימו אותם קודם.');S.settings.tables=S.tables.length;return}S.tables.length=n;extra.forEach(t=>{const h=(S.kingHolders||{})[t.n];if(h&&P(h)&&!S.kingQueue.includes(h))S.kingQueue.unshift(h);if(S.kingHolders)delete S.kingHolders[t.n]})}
   let healed=false;
@@ -766,15 +766,17 @@ function renderPlayers(app){
   </div>`;
   setTimeout(()=>document.getElementById('p_name')?.focus(),0);
 }
+function normName(n){return String(n||'').trim().replace(/\s+/g,' ').toLowerCase()}
+function hasName(n){return S.players.some(p=>normName(p.name)===normName(n))}
 function addPlayer(){
-  const n=document.getElementById('p_name').value.trim();if(!n)return;
+  const n=document.getElementById('p_name').value.trim().replace(/\s+/g,' ');if(!n)return;
   const club=document.getElementById('p_club').value.trim();const seed=+document.querySelector('input[name=seed]:checked').value;
-  if(S.players.some(p=>p.name===n)){toast('כבר יש שחקן בשם הזה');return}
+  if(hasName(n)){toast('כבר יש שחקן בשם הזה');return}
   S.players.push({id:uid(),name:n,club,seed});commit();
 }
 function bulkAdd(){
   const lines=document.getElementById('p_bulk').value.split('\n').map(l=>l.trim()).filter(Boolean);let c=0;
-  for(const l of lines){const parts=l.split(/[,\t]/).map(x=>x.trim());const name=parts[0].replace(/^\d+[.)\-]\s*/,'');if(!name||S.players.some(p=>p.name===name))continue;
+  for(const l of lines){const parts=l.split(/[,\t]/).map(x=>x.trim());const name=parts[0].replace(/^\d+[.)\-]\s*/,'').replace(/\s+/g,' ');if(!name||hasName(name))continue;
     let seed=0,club='';for(const x of parts.slice(1)){if(/^[123]$/.test(x))seed=+x;else if(x)club=x}
     S.players.push({id:uid(),name,club,seed});c++}
   toast(`נוספו ${c} שחקנים`);commit();
@@ -969,8 +971,8 @@ function resolve(pids,ms,explain,gid,depth){
   }
   // full tie -> lot
   const key=gid+':'+pids.slice().sort().join(',');
-  if(!S.lots[key]){S.lots[key]=shuffle(pids.slice());save()}
-  const lot=S.lots[key].filter(id=>pids.includes(id));
+  const hh=x=>{let h=2166136261;for(const c of key+'#'+x)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0};
+  const lot=(S.lots[key]||pids.slice().sort((a,b)=>hh(a)-hh(b))).filter(id=>pids.includes(id));
   pids.forEach(id=>explain[id].push('שוויון מוחלט — המיקום נקבע בהגרלה'));
   return lot;
 }
@@ -1095,8 +1097,8 @@ function canFinish(){
 }
 /* ---------- Player card ---------- */
 function playerHits(q){
-  q=(q||'').trim();if(q.length<2)return '';
-  const hits=S.players.filter(p=>p.name.includes(q)).slice(0,4);
+  q=normName(q);if(q.length<2)return '';
+  const hits=S.players.filter(p=>normName(p.name).includes(q)).slice(0,4);
   if(!hits.length)return '<div class="card muted" style="margin-bottom:10px">לא נמצא שחקן בשם הזה</div>';
   return hits.map(p=>playerCard(p.id)).join('');
 }
@@ -1139,7 +1141,7 @@ function quickAdd(){
   modal(`<h2>הוספת שחקן</h2><p class="muted">${sys()==='king'?'ייכנס לסוף התור.':'ישתתף מהסיבוב הבא.'}</p><label>שם</label><input id="qa_n"><div class="row" style="margin-top:14px"><button class="primary" onclick="doQuickAdd()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
   setTimeout(()=>document.getElementById('qa_n').focus(),50);
 }
-function doQuickAdd(){const n=document.getElementById('qa_n').value.trim();if(!n)return;if(S.players.some(p=>p.name===n)){toast('כבר יש שחקן בשם הזה');return}const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
+function doQuickAdd(){const n=document.getElementById('qa_n').value.trim().replace(/\s+/g,' ');if(!n)return;if(hasName(n)){toast('כבר יש שחקן בשם הזה');return}const p={id:uid(),name:n,club:'',seed:0,late:true};S.players.push(p);
   if(sys()==='king'){S.kingQueue.push(p.id);kingFill()}
   logEv('נוסף שחקן: '+n,'player');closeModal();commit()}
 function avgDuration(bo){const d=S.avgDur[bo];return d&&d.n>=2?d.sum/d.n:(bo===3?9:bo===5?14:20)*60000}
@@ -1479,7 +1481,7 @@ function lateEntry(){
   <div class="row" style="margin-top:16px"><button class="primary" onclick="doLateEntry()">הוסף</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
 }
 function doLateEntry(){
-  const name=document.getElementById('le_name').value.trim();if(!name){toast('צריך שם');return}if(S.players.some(p=>p.name===name)){toast('כבר יש שחקן בשם הזה');return}
+  const name=document.getElementById('le_name').value.trim().replace(/\s+/g,' ');if(!name){toast('צריך שם');return}if(hasName(name)){toast('כבר יש שחקן בשם הזה');return}
   const club=document.getElementById('le_club').value.trim();const gid=document.querySelector('input[name=leg]:checked')?.value;if(!gid)return;
   const p={id:uid(),name,club,seed:0,late:true};S.players.push(p);
   let g;
@@ -2173,11 +2175,11 @@ async function importFromClub(){
     const byG={};players.forEach(p=>(byG[groups[p.groupId]||'ללא קבוצה']=byG[groups[p.groupId]||'ללא קבוצה']||[]).push(p));
     modal(`<h2>ייבוא מאפליקציית הנוכחות</h2><p class="muted">סמנו את המשתתפים. שם הקבוצה נשמר כ"מועדון" — כך ההגרלה מפרידה חברי קבוצה לבתים שונים.</p>
     <div style="max-height:55vh;overflow:auto">${Object.entries(byG).map(([g,list])=>`<div style="margin-top:10px"><label class="chip" style="font-weight:700"><input type="checkbox" onchange="this.closest('div').querySelectorAll('.pi').forEach(c=>c.checked=this.checked)">${esc(g)} (${list.length})</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${esc(p.id)}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${S.players.some(x=>x.name===p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${list.map(p=>`<label class="chip"><input type="checkbox" class="pi" value="${esc(p.id)}" data-name="${esc(p.name)}" data-club="${esc(g)}" ${hasName(p.name)?'checked disabled':''}>${esc(p.name)}</label>`).join('')}</div></div>`).join('')}</div>
     <div class="row" style="margin-top:14px"><button class="primary" onclick="doImport()">הוסף את המסומנים</button><button class="ghost" onclick="closeModal()">ביטול</button></div>`);
   }catch(e){console.error(e);modal('<h2>ייבוא</h2><div class="err-box">לא הצלחתי לקרוא את רשימת השחקנים. בדקו הרשאות ב-Firestore.</div><div class="row" style="margin-top:12px"><button onclick="closeModal()">סגור</button></div>')}
 }
-function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled)').forEach(c=>{if(S.players.some(p=>p.name===c.dataset.name))return;S.players.push({id:uid(),name:c.dataset.name,club:c.dataset.club,seed:0,clubPlayerId:c.value});n++});closeModal();commit();toast(`נוספו ${n} שחקנים`)}
+function doImport(){let n=0;document.querySelectorAll('.pi:checked:not(:disabled)').forEach(c=>{if(hasName(c.dataset.name))return;S.players.push({id:uid(),name:c.dataset.name,club:c.dataset.club,seed:0,clubPlayerId:c.value});n++});closeModal();commit();toast(`נוספו ${n} שחקנים`)}
 
 /* ========================= PUBLIC DISPLAY ========================= */
 /* ---------- קישור צפייה פתוח: עותק מקוצר של התחרות, בלי התחברות ---------- */
@@ -2200,7 +2202,7 @@ let pubTimer=null;
 let pubScreen=0;
 const PUB_SCREENS=['now','next','table','results'];
 function openPublic(){
-  pubScreen=0;pubDraw();
+  pubScreen=0;pubDraw();clearInterval(pubTimer);
   pubTimer=setInterval(()=>{pubScreen=(pubScreen+1)%PUB_SCREENS.length;pubDraw()},14000);
   if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
 }
