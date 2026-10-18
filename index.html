@@ -643,9 +643,10 @@ function renderSetup(app){
       ${s.consolation?`<label class="chip ${s.consPlace?'on':''}" title="מי שמפסיד בנוקאאוט התחתון ממשיך לשחק על מקומות, כך שכל אחד מסיים עם מקום מדויק"><input type="checkbox" ${s.consPlace?'checked':''} ${S.koBuilt?'disabled':''} onchange="S.settings.consPlace=this.checked;commit()">דירוג מלא בנוקאאוט התחתון</label>`:''}
     </div>`:''}
     ${s.system==='swiss'?`<div class="grid2">
-      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="12" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים</div></div>
+      <div><label>מספר סיבובים</label><input id="s_swr" type="number" min="3" max="${S.players.length>=4?Math.min(12,swissMaxRounds(S.players.length)):12}" value="${esc(s.swissRounds)}" ${locked?'disabled':''}><div class="hint">מומלץ ${suggestSwissRounds(S.players.length||16)} ל-${S.players.length||16} שחקנים${S.players.length>=4?`, לכל היותר ${swissMaxRounds(S.players.length)} (יותר מזה יש משחקים חוזרים)`:''}</div></div>
       <div><label>מערכות בכל משחק</label><select id="s_bog" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boGroup==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div>
     </div>
+    ${s.swissKO?`<div class="grid2"><div><label>מערכות בנוקאאוט</label><select id="s_bok" ${locked?'disabled':''}>${[3,5,7].map(b=>`<option value="${b}" ${s.boKO==b?'selected':''}>הטוב מ-${b}</option>`).join('')}</select></div><div></div></div>`:''}
     <div class="row"><label class="chip ${s.swissKO?'on':''}"><input type="checkbox" ${s.swissKO?'checked':''} ${locked?'disabled':''} onchange="S.settings.swissKO=this.checked;commit()">נוקאאוט למובילים בסוף</label>
       ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
     ${isTeamSys()?`<div class="grid2">
@@ -819,7 +820,7 @@ function planDesc(p){
 function planCard(n){
   if(sys()==='swiss'){
     const r=S.settings.swissRounds||suggestSwissRounds(n);
-    return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
+    return `<div class="card" style="margin-bottom:14px"><h3>מבנה מוצע</h3><div class="row" style="margin-top:8px">${[3,4,5,6,7,8].filter(x=>x<=swissMaxRounds(n)).map(x=>`<button class="chip ${x===r?'on':''}" onclick="S.settings.swissRounds=${x};commit()">${x} סיבובים</button>`).join('')}</div>
     <div class="hint">${esc(r)} סיבובים ל-${n} שחקנים${r===suggestSwissRounds(n)?' — זו ההמלצה':''}. סיום משוער: כ-${Math.ceil(r*Math.ceil(n/2)/Math.max(1,S.settings.tables)*avgDuration(S.settings.boGroup)/60000)} דק׳.</div></div>`;
   }
   if(isTeamSys()||sys()==='king')return '';
@@ -1503,6 +1504,7 @@ function startSwiss(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.byes=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
   if(!S.settings.swissRounds)S.settings.swissRounds=suggestSwissRounds(S.players.length);
+  {const mx=swissMaxRounds(S.players.length);if(S.settings.swissRounds>mx){S.settings.swissRounds=mx;toast(`עם ${S.players.length} שחקנים אפשר עד ${mx} סיבובים בלי משחק חוזר, לכן ${mx} סיבובים`)}}
   swissNextRound();logEv(`התחילה תחרות שוויצרית — ${S.settings.swissRounds} סיבובים`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function swissStandings(){
@@ -1519,26 +1521,34 @@ function swissNextRound(){
   const played=new Set();S.matches.filter(m=>m.stage==='swiss'&&m.p1&&m.p2).forEach(m=>{played.add(m.p1+'|'+m.p2);played.add(m.p2+'|'+m.p1)});
   let pool = (done===0 ? S.players.slice().sort((a,b)=>(a.seed||9)-(b.seed||9)).map(p=>p.id) : swissStandings().map(x=>x.id)).filter(id=>!(S.out||[]).includes(id));
   let bye=null;
-  if(pool.length%2){for(let i=pool.length-1;i>=0;i--){if(!(S.byes||[]).includes(pool[i])){bye=pool[i];break}}if(!bye)bye=pool[pool.length-1];pool=pool.filter(x=>x!==bye)}
+  if(pool.length%2){const nb=id=>(S.byes||[]).filter(x=>x===id).length;bye=pool.reduce((b,id)=>nb(id)<=nb(b)?id:b,pool[pool.length-1]);pool=pool.filter(x=>x!==bye)}
   let pairs;
   if(done===0){pairs=[];const h=pool.length/2;for(let i=0;i<h;i++)pairs.push([pool[i],pool[i+h]])}
-  else pairs=swissPair(pool,played)||fallbackPair(pool);
+  else{
+    // הסיבוב הבא: כל השחקנים חוץ מאחד מאלה עם הכי מעט Bye (כשמספר השחקנים אי-זוגי)
+    const all=bye?[...pool,bye]:pool,nb=id=>(S.byes||[]).filter(x=>x===id).length+(id===bye?1:0),mb=Math.min(...all.map(nb));
+    const nextPools=bye?all.filter(id=>nb(id)===mb).map(x=>all.filter(y=>y!==x)):[pool];
+    pairs=swissPair(pool,played,done+1<S.settings.swissRounds?pp=>{const pl=new Set(played);pp.forEach(([x,y])=>{pl.add(x+'|'+y);pl.add(y+'|'+x)});return nextPools.some(np=>!!swissPair(np,pl,null,5000))}:null)||fallbackPair(pool)}
+  const rem=pairs.filter(([a,b])=>played.has(a+'|'+b));
+  if(rem.length){const t=`שימו לב: בסיבוב ${done+1} יש משחק חוזר (${rem.map(([a,b])=>pname(a)+' – '+pname(b)).join(', ')}). אין זיווג אחר אפשרי.`;logEv(t,'round');setTimeout(()=>toast(t),0)}
   pairs.forEach(([a,b])=>S.matches.push(newMatch({stage:'swiss',round:done+1,p1:a,p2:b})));
   if(bye){S.byes=(S.byes||[]).concat(bye);const m=newMatch({stage:'swiss',round:done+1,p1:bye,p2:null});m.status='done';m.winner=bye;m.bye=true;S.matches.push(m);logEv(pname(bye)+' קיבל/ה בוחן (Bye) בסיבוב '+(done+1))}
   logEv('נוצר סיבוב '+(done+1),'round');
   return pairs.length;
 }
-function swissPair(pool,played,depth){
-  if(!pool.length)return [];
-  if((depth||0)>400)return null;
-  const a=pool[0];
-  for(let i=1;i<pool.length;i++){
-    const b=pool[i];if(played.has(a+'|'+b))continue;
-    const rest=swissPair(pool.filter((x,j)=>j!==0&&j!==i),played,(depth||0)+1);
-    if(rest)return [[a,b],...rest];
-  }
-  return null;
+// accept: כשיש עוד סיבוב, זיווג מתקבל רק אם גם בסיבוב הבא יש זיווג בלי משחק חוזר (עם 6 שחקנים בלי זה נתקעים ב-15% מהתחרויות)
+function swissPair(pool,played,accept,lim){
+  let full=0,steps=0,first=null;lim=lim||200000;
+  const go=(rest,acc)=>{
+    if(!rest.length){full++;if(!first)first=acc.slice();return !accept||full>300||accept(acc)?acc.slice():null}
+    if(++steps>lim)return null;
+    const a=rest[0];
+    for(let i=1;i<rest.length;i++){const b=rest[i];if(played.has(a+'|'+b))continue;acc.push([a,b]);const r=go(rest.filter((x,j)=>j!==0&&j!==i),acc);acc.pop();if(r||steps>lim)return r}
+    return null};
+  // אף זיווג לא עבר את בדיקת הסיבוב הבא: לוקחים את הראשון שנמצא (עדיין בלי משחק חוזר עכשיו)
+  return go(pool,[])||first;
 }
+function swissMaxRounds(n){return Math.max(1,n-1)}
 function fallbackPair(pool){const out=[];for(let i=0;i<pool.length-1;i+=2)out.push([pool[i],pool[i+1]]);return out}
 function swissTab(){
   const st=swissStandings();const r=swissRoundsDone();const ms=S.matches.filter(m=>m.stage==='swiss');
@@ -1849,7 +1859,7 @@ function finalRanking(){
     const st=swissStandings();const main=S.matches.filter(m=>m.stage==='ko'&&m.bracket==='main'&&!m.third);
     const fin=main.find(m=>m.koRound===S.koRounds-1);
     const elim={};main.forEach(m=>{if(m.status!=='done'||m.bye)return;const l=m.winner===m.p1?m.p2:m.p1;if(l)elim[l]=m.koRound});
-    const tier=id=>{if(fin&&fin.winner===id)return 0;if(fin&&fin.status==='done'&&(fin.p1===id||fin.p2===id))return 1;if(elim[id]!=null)return 10+(S.koRounds-elim[id]);return 100};
+    const tier=id=>{if(fin&&fin.winner===id)return 0;if(fin&&fin.status==='done'&&(fin.p1===id||fin.p2===id))return 1;if(elim[id]!=null)return 10+(S.koRounds-elim[id]);return 100+st.findIndex(x=>x.id===id)};
     const ord=S.players.slice().sort((a,b)=>tier(a.id)-tier(b.id)||st.findIndex(x=>x.id===a.id)-st.findIndex(x=>x.id===b.id));
     let place=1;return ord.map((p,i)=>{if(i>0&&tier(ord[i-1].id)!==tier(p.id))place=i+1;return {p,place,shared:ord.filter(x=>tier(x.id)===tier(p.id)).length>1&&tier(p.id)>1,extra:''}});
   }
