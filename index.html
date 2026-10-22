@@ -651,7 +651,7 @@ function renderSetup(app){
       ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
     ${isTeamSys()?`<div class="grid2">
       <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${esc(s.rounds)}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
-      <div><label>כמה נקודות בכל משחק (סך הכול)</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">משחקים עד שנשחקו כל הנקודות (למשל 21 = 13:8). הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
+      <div><label>משחק עד כמה נקודות</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">המנצח מגיע למספר הזה בהפרש 2 (למשל עד 21: ‏21:16). הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
     </div>`:''}
     ${s.system==='king'?`<div class="grid2">
       <div><label>משחק עד כמה נקודות</label><select id="s_king" ${locked?'disabled':''}>${[5,7,11,15,21].map(n=>`<option value="${n}" ${s.kingTarget==n?'selected':''}>${n} נקודות</option>`).join('')}</select></div>
@@ -1273,7 +1273,7 @@ function tablesTab(){
 function matchLabel(m){
   if(m.stage==='group')return `${G(m.groupId)?.name||''} · סיבוב ${m.round}`;
   if(m.stage==='swiss')return `סיבוב ${m.round}`;
-  if(m.stage==='round')return `סיבוב ${m.round} · ${m.target||S.settings.target} נק׳ סך הכול`;
+  if(m.stage==='round')return `סיבוב ${m.round} · עד ${m.target||S.settings.target}`;
   if(m.stage==='king')return `מלך השולחן · עד ${m.target||S.settings.kingTarget}`;
   return (isCons(m.bracket)?'נוקאאוט תחתון · ':'')+koRoundName(m);
 }
@@ -1397,15 +1397,17 @@ function openPointResult(m){
   const sc=m.score||[null,null];
   modal(`<h2>${esc(matchLabel(m))}${m.table?' · שולחן '+esc(m.table):''}</h2>
   <div class="names"><div>${esc(sideName(m,1))}</div><div></div><div>${esc(sideName(m,2))}</div></div>
-  <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pa" value="${esc(sc[0])}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" max="${esc(tg)}" id="pb" value="${esc(sc[1])}" placeholder="–"></div></div>
-  <div class="hint">${m.stage==='king'?`משחק עד ${esc(tg)}, בהפרש 2.`:`סך הכול ${esc(tg)} נקודות בין שני הצדדים (תיקו מותר).`} מקלידים צד אחד — השני מתמלא להשלמה.</div>
+  <div class="sets"><div class="set"><input type="number" inputmode="numeric" min="0" id="pa" value="${esc(sc[0])}" placeholder="–"><span class="x">:</span><input type="number" inputmode="numeric" min="0" id="pb" value="${esc(sc[1])}" placeholder="–"></div></div>
+  <div class="hint">משחק עד ${esc(tg)}, בהפרש 2. מקלידים את הנקודות של המפסיד — למנצח נכנס ${esc(tg)}.</div>
   <div class="quick"><span class="tiny">מהיר:</span><button onclick="document.getElementById('pa').value=${Number(tg)};document.getElementById('pb').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,1))} ${esc(tg)}:0</button><button onclick="document.getElementById('pb').value=${Number(tg)};document.getElementById('pa').value=0;pRefresh('${ja(m.id)}')">${esc(sideName(m,2))} ${esc(tg)}:0</button></div>
   <div id="resErr" class="err-box" style="display:none;margin-top:8px"></div>
   <div class="row" style="margin-top:16px"><button class="primary big" id="saveRes" onclick="savePoint('${ja(m.id)}')">שמור ופנה שולחן</button><button class="ghost" onclick="closeModal()">סגור</button>
   ${m.status==='playing'?`<button onclick="backToQueue('${ja(m.id)}')">החזר לתור</button>`:''}</div>`);
   ['pa','pb'].forEach(id=>{const el=document.getElementById(id);
     el.addEventListener('input',()=>{const other=document.getElementById(id==='pa'?'pb':'pa');const v=el.value===''?null:+el.value;
-      if(m.stage!=='king'&&v!==null&&v>=0&&v<=tg)other.value=Math.max(0,tg-v);
+      // המנצח מגיע ל-tg; בשוויון tg-1 ממשיכים עד הפרש 2
+      if(v!==null&&v>=0&&v!==tg)other.value=v<tg-1?tg:v===tg-1?v+2:v-2;
+      else if(v===tg&&other.value!==''&&+other.value>=tg-1)other.value='';
       pRefresh(m.id)});
     el.addEventListener('focus',()=>el.select());
     el.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('saveRes').click()});});
@@ -1418,8 +1420,7 @@ function pRefresh(mid){
   let err='';
   if(a===null||b===null)err='';
   else if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0)err='נקודות חייבות להיות מספר שלם וחיובי';
-  else if(m.stage==='king'){const hi=Math.max(a,b),lo=Math.min(a,b);if(hi<tg)err='המשחק עד '+tg+' נקודות';else if(hi===tg?lo>tg-2:hi-lo!==2)err=`מנצחים ב-${tg} עם הפרש 2 לפחות. אחרי ${tg-1}:${tg-1} ממשיכים עד הפרש 2 בדיוק`}
-  else if(a+b!==tg)err=`הסכום צריך להיות ${tg} (עכשיו ${a+b})`;
+  else{const hi=Math.max(a,b),lo=Math.min(a,b);if(hi<tg)err='המשחק עד '+tg+' נקודות';else if(hi===tg?lo>tg-2:hi-lo!==2)err=`מנצחים ב-${tg} עם הפרש 2 לפחות. אחרי ${tg-1}:${tg-1} ממשיכים עד הפרש 2 בדיוק`}
   const e=document.getElementById('resErr');e.style.display=err?'block':'none';e.textContent=err;
   const ok=a!==null&&b!==null&&!err;document.getElementById('saveRes').disabled=!ok;
 }
