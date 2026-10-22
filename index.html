@@ -515,7 +515,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-22.1';
+const APP_VER='2026-10-22.2';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1586,22 +1586,20 @@ function americanoRound(r){
   prev.forEach(m=>matchPids(m).forEach(id=>{if(played[id]!=null)played[id]++}));
   let order = ((sys()==='mexicano'&&r>1) ? amStandings().map(x=>x.id) : shuffle(S.players.map(p=>p.id))).filter(id=>!out.includes(id));
   const need=courts*4;
-  if(order.length>need){
-    const bySit=order.slice().sort((a,b)=>played[a]-played[b]);
-    const sit=new Set(bySit.slice(need));
-    order=order.filter(id=>!sit.has(id));
-    S.sitOut=[...sit];
-  } else {order=order.slice(0,Math.floor(order.length/4)*4);S.sitOut=act.map(p=>p.id).filter(id=>!order.includes(id))}
+  // מי ששיחק הכי מעט משחק; בשוויון — לפי הסדר שקיבלנו
+  const pick=o=>{if(o.length<=need)return o.slice(0,Math.floor(o.length/4)*4);const keep=new Set(o.slice().sort((a,b)=>played[a]-played[b]).slice(0,need));return o.filter(id=>keep.has(id))};
   const partnered={},opposed={};prev.forEach(m=>{const A=sideIds(m,1),B=sideIds(m,2);[A,B].forEach(t=>{if(t.length===2){partnered[t[0]+'|'+t[1]]=1;partnered[t[1]+'|'+t[0]]=1}});A.forEach(x=>B.forEach(y=>{opposed[x+'|'+y]=(opposed[x+'|'+y]||0)+1;opposed[y+'|'+x]=opposed[x+'|'+y]}))});
   if(!(sys()==='mexicano'&&r>1)){
     let best=null,bestCost=Infinity;
-    for(let att=0;att<300;att++){const o=shuffle(order.slice());let cost=0;
+    // מי שנח נבחר בכל ניסיון מחדש, כדי שהזוגות שנשארים יהיו כאלה שעוד לא שיחקו יחד
+    for(let att=0;att<300;att++){const o=shuffle(pick(shuffle(order.slice())));let cost=0;
       for(let i=0;i<o.length;i+=4){const g=o.slice(i,i+4);const opts=[[[g[0],g[1]],[g[2],g[3]]],[[g[0],g[2]],[g[1],g[3]]],[[g[0],g[3]],[g[1],g[2]]]];
         const c=Math.min(...opts.map(p=>(partnered[p[0][0]+'|'+p[0][1]]?100:0)+(partnered[p[1][0]+'|'+p[1][1]]?100:0)));cost+=c;
         for(let x=0;x<4;x++)for(let y=x+1;y<4;y++)cost+=(opposed[g[x]+'|'+g[y]]||0);}
       if(cost<bestCost){bestCost=cost;best=o;if(cost===0)break}}
     order=best;
-  }
+  } else order=pick(order);
+  S.sitOut=act.map(p=>p.id).filter(id=>!order.includes(id));
   for(let i=0;i<order.length;i+=4){
     const g=order.slice(i,i+4);let t1,t2;
     if(sys()==='mexicano'&&r>1){t1=[g[0],g[3]];t2=[g[1],g[2]]}
