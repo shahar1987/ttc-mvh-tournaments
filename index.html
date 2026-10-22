@@ -515,7 +515,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-10-22.2';
+const APP_VER='2026-10-22.3';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -650,7 +650,7 @@ function renderSetup(app){
     <div class="row"><label class="chip ${s.swissKO?'on':''}"><input type="checkbox" ${s.swissKO?'checked':''} ${locked?'disabled':''} onchange="S.settings.swissKO=this.checked;commit()">נוקאאוט למובילים בסוף</label>
       ${s.swissKO?`<div style="min-width:160px"><label style="margin:0">כמה עולים</label><select onchange="S.settings.swissAdvance=+this.value;commit()">${[2,4,8,16].map(n=>`<option value="${n}" ${s.swissAdvance==n?'selected':''}>${n}</option>`).join('')}</select></div>`:''}</div>`:''}
     ${isTeamSys()?`<div class="grid2">
-      <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${esc(s.rounds)}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. 6–8 זה ערב טיפוסי.</div></div>
+      <div><label>מספר סיבובים</label><input id="s_rounds" type="number" min="3" max="20" value="${esc(s.rounds)}" ${locked?'disabled':''}><div class="hint">כל סיבוב = משחק אחד לכל שולחן. באמריקנו המספר עולה לבד בהתחלה אם צריך יותר סיבובים כדי שכל אחד ישחק בזוג עם כל אחד.</div></div>
       <div><label>משחק עד כמה נקודות</label><select id="s_target" ${locked?'disabled':''}>${[11,15,16,21,24,32].map(n=>`<option value="${n}" ${s.target==n?'selected':''}>${n} נקודות</option>`).join('')}</select><div class="hint">המנצח מגיע למספר הזה בהפרש 2 (למשל עד 21: ‏21:16). הניקוד אישי — הנקודות שצברת נשארות שלך.</div></div>
     </div>`:''}
     ${s.system==='king'?`<div class="grid2">
@@ -1567,6 +1567,8 @@ function swissTab(){
 function startAmericano(){
   S.tables.forEach(t=>t.matchId=null);S.matches=[];S.koBuilt=false;syncTables();S.tables.forEach(t=>t.lock=null);
   S.lastPlayed={};S.phaseStart=Date.now();S.tab='dash';
+  // שולה: חשוב שכל אחד ישחק בזוג עם כל אחד
+  if(sys()==='americano'&&S.settings.rounds<amFullRounds())S.settings.rounds=amFullRounds();
   americanoRound(1);logEv(`התחיל ${SYSTEMS[sys()].n} — ${S.settings.rounds} סיבובים, ${S.settings.target} נק׳ בכל משחק`,'start');goto('live');if(S.settings.auto)autoDistribute();
 }
 function amStandings(){
@@ -1578,6 +1580,22 @@ function amStandings(){
   });
   return Object.values(st).sort((x,y)=>y.pts-x.pts||y.w-x.w||(y.pts-y.against)-(x.pts-x.against)||pname(x.id).localeCompare(pname(y.id)));
 }
+// מי ששיחק הכי מעט משחק; בשוויון — לפי הסדר שקיבלנו
+// כמה סיבובים צריך כדי שכל זוג אפשרי ישחק יחד: כל משחק מכסה 2 זוגות
+function amFullRounds(){const n=S.players.filter(p=>!(S.out||[]).includes(p.id)).length,c=Math.min(S.settings.tables,Math.floor(n/4));if(!c)return 0;const min=Math.ceil(n*(n-1)/2/(2*c));
+  // shortcut: from 7 players the exact minimum is not always reachable (simulation: 96-98%, 46% for 12 on 3 tables); one more round reached 100%
+  return min+(n>=7?1:0)}
+function amSeat(o,played,need){if(o.length<=need)return o.slice(0,Math.floor(o.length/4)*4);const keep=new Set(o.slice().sort((a,b)=>played[a]-played[b]).slice(0,need));return o.filter(id=>keep.has(id))}
+// סיבוב אחד: מי משחק ובאיזה זוגות, עם הכי מעט זוגות חוזרים מתוך tries ניסיונות. מי שנח נבחר בכל ניסיון מחדש
+function amRoundPick(ids,played,partnered,opposed,need,tries){
+  const pc=p=>(partnered[p[0][0]+'|'+p[0][1]]?100:0)+(partnered[p[1][0]+'|'+p[1][1]]?100:0);let best=null,bestCost=Infinity;
+  for(let att=0;att<tries;att++){const o=shuffle(amSeat(shuffle(ids.slice()),played,need));let cost=0;const gs=[];
+    for(let i=0;i<o.length;i+=4){const g=o.slice(i,i+4);const opts=[[[g[0],g[1]],[g[2],g[3]]],[[g[0],g[2]],[g[1],g[3]]],[[g[0],g[3]],[g[1],g[2]]]];
+      const p=opts.reduce((a,b)=>pc(b)<pc(a)?b:a);cost+=pc(p);gs.push(p);
+      for(let x=0;x<4;x++)for(let y=x+1;y<4;y++)cost+=(opposed[g[x]+'|'+g[y]]||0);}
+    if(cost<bestCost){bestCost=cost;best=gs;if(cost===0)break}}
+  return best}
+function amApply(gs,played,partnered,opposed){gs.forEach(([A,B])=>{[A,B].forEach(t=>{partnered[t[0]+'|'+t[1]]=partnered[t[1]+'|'+t[0]]=1});[...A,...B].forEach(x=>played[x]=(played[x]||0)+1);A.forEach(x=>B.forEach(y=>{opposed[x+'|'+y]=(opposed[x+'|'+y]||0)+1;opposed[y+'|'+x]=opposed[x+'|'+y]}))})}
 function americanoRound(r){
   const out=S.out||[],act=S.players.filter(p=>!out.includes(p.id));const n=act.length;const courts=Math.min(S.settings.tables,Math.floor(n/4));
   if(courts<1){toast('צריך לפחות 4 שחקנים לשולחן אחד');return 0}
@@ -1586,30 +1604,19 @@ function americanoRound(r){
   prev.forEach(m=>matchPids(m).forEach(id=>{if(played[id]!=null)played[id]++}));
   let order = ((sys()==='mexicano'&&r>1) ? amStandings().map(x=>x.id) : shuffle(S.players.map(p=>p.id))).filter(id=>!out.includes(id));
   const need=courts*4;
-  // מי ששיחק הכי מעט משחק; בשוויון — לפי הסדר שקיבלנו
-  const pick=o=>{if(o.length<=need)return o.slice(0,Math.floor(o.length/4)*4);const keep=new Set(o.slice().sort((a,b)=>played[a]-played[b]).slice(0,need));return o.filter(id=>keep.has(id))};
   const partnered={},opposed={};prev.forEach(m=>{const A=sideIds(m,1),B=sideIds(m,2);[A,B].forEach(t=>{if(t.length===2){partnered[t[0]+'|'+t[1]]=1;partnered[t[1]+'|'+t[0]]=1}});A.forEach(x=>B.forEach(y=>{opposed[x+'|'+y]=(opposed[x+'|'+y]||0)+1;opposed[y+'|'+x]=opposed[x+'|'+y]}))});
+  let gs;
   if(!(sys()==='mexicano'&&r>1)){
-    let best=null,bestCost=Infinity;
-    // מי שנח נבחר בכל ניסיון מחדש, כדי שהזוגות שנשארים יהיו כאלה שעוד לא שיחקו יחד
-    for(let att=0;att<300;att++){const o=shuffle(pick(shuffle(order.slice())));let cost=0;
-      for(let i=0;i<o.length;i+=4){const g=o.slice(i,i+4);const opts=[[[g[0],g[1]],[g[2],g[3]]],[[g[0],g[2]],[g[1],g[3]]],[[g[0],g[3]],[g[1],g[2]]]];
-        const c=Math.min(...opts.map(p=>(partnered[p[0][0]+'|'+p[0][1]]?100:0)+(partnered[p[1][0]+'|'+p[1][1]]?100:0)));cost+=c;
-        for(let x=0;x<4;x++)for(let y=x+1;y<4;y++)cost+=(opposed[g[x]+'|'+g[y]]||0);}
-      if(cost<bestCost){bestCost=cost;best=o;if(cost===0)break}}
-    order=best;
-  } else order=pick(order);
-  S.sitOut=act.map(p=>p.id).filter(id=>!order.includes(id));
-  for(let i=0;i<order.length;i+=4){
-    const g=order.slice(i,i+4);let t1,t2;
-    if(sys()==='mexicano'&&r>1){t1=[g[0],g[3]];t2=[g[1],g[2]]}
-    else{
-      const opts=[[[g[0],g[1]],[g[2],g[3]]],[[g[0],g[2]],[g[1],g[3]]],[[g[0],g[3]],[g[1],g[2]]]];
-      const fresh=opts.find(o=>!partnered[o[0][0]+'|'+o[0][1]]&&!partnered[o[1][0]+'|'+o[1][1]]);
-      const pick=fresh||opts[Math.floor(Math.random()*3)];t1=pick[0];t2=pick[1];
-    }
-    S.matches.push(newMatch({stage:'round',round:r,t1,t2,target:S.settings.target,score:null}));
-  }
+    // בוחרים את הסיבוב שממנו עדיין אפשר להגיע לכך שכל אחד שיחק בזוג עם כל אחד עד הסיבוב האחרון
+    const left=Math.max(0,S.settings.rounds-r),all=order.length*(order.length-1);let bestScore=-1;
+    for(let c=0;c<(left?40:1);c++){const cand=amRoundPick(order,played,partnered,opposed,need,300);let score=0;
+      for(let k=0;k<(left?4:0);k++){const pl={...played},pt={...partnered},op={...opposed};amApply(cand,pl,pt,op);
+        for(let j=0;j<left;j++)amApply(amRoundPick(order,pl,pt,op,need,40),pl,pt,op);
+        score=Math.max(score,order.reduce((a,x)=>a+order.filter(y=>pt[x+'|'+y]).length,0));if(score>=all)break}
+      if(score>bestScore){bestScore=score;gs=cand}if(score>=all)break}
+  } else {order=amSeat(order,played,need);gs=[];for(let i=0;i<order.length;i+=4){const g=order.slice(i,i+4);gs.push([[g[0],g[3]],[g[1],g[2]]])}}
+  const playing=gs.flat(2);S.sitOut=act.map(p=>p.id).filter(id=>!playing.includes(id));
+  gs.forEach(([t1,t2])=>S.matches.push(newMatch({stage:'round',round:r,t1,t2,target:S.settings.target,score:null})));
   logEv('נוצר סיבוב '+r,'round');
   return 1;
 }
