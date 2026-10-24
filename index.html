@@ -2267,7 +2267,7 @@ render();
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserLocalPersistence} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {getFirestore,doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-const cfg={apiKey:"AIzaSyCmEVnBSkODaCZyrdEdO0vNQtvOnvgsQiA",authDomain:"ttcmh-2a752.firebaseapp.com",projectId:"ttcmh-2a752",storageBucket:"ttcmh-2a752.firebasestorage.app",messagingSenderId:"198162387540",appId:"1:198162387540:web:f4c4728a39aed9468c13c1"};
+const cfg={apiKey:"AIzaSyDhPiyIrP1zOu5bNSpsQDyXFgZBP6rV7vo",authDomain:"ttcmh-2a752.firebaseapp.com",projectId:"ttcmh-2a752",storageBucket:"ttcmh-2a752.firebasestorage.app",messagingSenderId:"198162387540",appId:"1:198162387540:web:f4c4728a39aed9468c13c1"};
 const app=initializeApp(cfg);const auth=getAuth(app);const db=getFirestore(app);
 setPersistence(auth,browserLocalPersistence).catch(()=>{});
 window.FB={auth,db,onAuthStateChanged,signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),signOut:()=>signOut(auth),doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction};
