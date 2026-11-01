@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="./icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 /* ============ tokens ============ */
 :root{
@@ -541,7 +541,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-11-01.4';
+const APP_VER='2026-11-01.6';
 let verTag=null;
 // קודם בודקים רק את הכותרות (כמה בתים); את הדף כולו (230KB) מורידים רק כשהוא באמת השתנה
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname,{method:'HEAD',cache:'no-store'}).then(r=>{const tag=r.headers.get('etag')||r.headers.get('last-modified');if(tag&&tag===verTag)return;verTag=tag;fullCheck()}).catch(()=>{})}
@@ -624,7 +624,7 @@ function render(remote){
   if(S.phase==='setup'&&!remote)keepSetup();
   const app=document.getElementById('app');
   document.getElementById('btnList').style.display=TID?'':'none';document.getElementById('btnOut').style.display=USER&&!TID?'':'none';document.getElementById('syncBtn').style.display=TID||syncErr?'':'none';document.querySelector('header').classList.toggle('has-steps',!!(USER&&PROFILE&&TID)&&sys()!=='league');
-  if(!window.FB){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
+  if((!window.FB||BOOTED)&&!TID){app.innerHTML='<p class="muted" style="text-align:center;margin-top:60px">טוען…</p>';return}
   if(VIEW){document.getElementById('steps').innerHTML='';document.getElementById('hdrName').textContent=S.settings.name||CLUB_NAME;return renderView(app)}
   if(!USER){document.getElementById('steps').innerHTML='';return renderLogin(app)}
   if(!PROFILE){document.getElementById('steps').innerHTML='';app.innerHTML='<div class="card login"><h2>אין הרשאה</h2><p class="muted">המשתמש הזה לא מוגדר במערכת הנוכחות של המועדון. בקשו משלום להוסיף אותו.</p><button onclick="FB.signOut()">יציאה</button></div>';return}
@@ -963,6 +963,8 @@ function applyModelLocks(){
 /* ========================= ENGINE: results & standings ========================= */
 function setsWon(m){let a=0,b=0;for(const [x,y] of m.sets){if(x>y)a++;else if(y>x)b++}return [a,b]}
 function validSet(a,b){if(a==null||b==null||isNaN(a)||isNaN(b))return false;const hi=Math.max(a,b),lo=Math.min(a,b);if(hi<11)return false;if(hi===11)return lo<=9;return hi-lo===2}
+// 1, 2 ו-3 יכולים להיות תחילת 10+, 20+ או 30+ (דיוס), אז עוברים למשבצת הבאה רק כשהמספר בטוח שלם
+function scoreDone(v){return v.length===2||+v>=4}
 function otherScore(v){if(v<=9)return 11;if(v===10)return 12;return v+2}
 function playerStats(pid,ms){
   let mp=0,w=0,l=0,sw=0,sl=0,pw=0,pl=0,played=0;
@@ -1348,13 +1350,13 @@ function openResult(mid){
   openMid=mid;const box=document.getElementById('sets');
   box.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input',e=>{inp.value=inp.value.replace(/\D/g,'').slice(0,2);const i=+inp.dataset.i,side=+inp.dataset.side;const v=inp.value===''?null:+inp.value;const other=document.getElementById((side?'a':'b')+i);
-      // הצד השני מתעדכן עם כל ספרה (13 נותן 15), גם בתוצאה שנשמרה קודם; רק צד שהוקלד ידנית עכשיו לא נדרס
+      // הצד השני מתעדכן עם כל ספרה (13 נותן 15), גם בתוצאה שנשמרה קודם; צד שהוקלד ידנית לא נדרס, ומספר שעוד לא הושלם לא משנה אותו
       inp.dataset.auto='0';
-      if(v!==null&&v>=0){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov<v&&v<=10)||(other.dataset.auto!=='0'&&!(v===11&&ov<=9))){other.value=otherScore(v);other.dataset.auto='1'}}
+      if(v!==null&&v>=0&&(scoreDone(inp.value)||other.dataset.auto!=='0')){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov<v&&v<=10)||(other.dataset.auto!=='0'&&!(v===11&&ov<=9))){other.value=otherScore(v);other.dataset.auto='1'}}
       if(v===null&&other.dataset.auto!=='0')other.value='';
       refreshSets(m);
-      // אחרי מספר שלם (כל דבר חוץ מ-1, שיכול להיות 10, 11...) עוברים למערכה הבאה
-      if(e.isTrusted!==false&&inp.value!==''&&(inp.value.length===2||inp.value!=='1')){const n=document.getElementById('a'+(i+1));if(n&&!n.disabled)n.focus();else document.getElementById('saveRes').focus()}});
+      // אחרי מספר שלם עוברים למערכה הבאה
+      if(e.isTrusted!==false&&scoreDone(inp.value)){const n=document.getElementById('a'+(i+1));if(n&&!n.disabled)n.focus();else document.getElementById('saveRes').focus()}});
     inp.addEventListener('focus',()=>inp.select());
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const i=+inp.dataset.i;const nxt=document.getElementById('a'+(i+1));if(nxt&&!nxt.disabled)nxt.focus();else document.getElementById('saveRes').click()}});
   });
@@ -2041,9 +2043,9 @@ function lgClose(gi){lgChange();const L=lgL();if(lgGameWinner(L.games[gi])===nul
 function lgReopen(gi){const L=lgL();L.closed=(L.closed||[]).filter(x=>x!==gi);commit()}
 function lgInput(inp){inp.value=inp.value.replace(/\D/g,'').slice(0,2);const v=inp.value===''?null:+inp.value;
   const other=document.querySelector(`input[data-g="${inp.dataset.g}"][data-k="${inp.dataset.k}"][data-r="${1-inp.dataset.r}"]`);inp.dataset.auto='0';
-  if(v!==null){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov<v&&v<=10)||(other.dataset.auto!=='0'&&!(v===11&&ov<=9))){other.value=otherScore(v);other.dataset.auto='1'}}
+  if(v!==null&&(scoreDone(inp.value)||other.dataset.auto!=='0')){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov<v&&v<=10)||(other.dataset.auto!=='0'&&!(v===11&&ov<=9))){other.value=otherScore(v);other.dataset.auto='1'}}
   if(v===null&&other.dataset.auto!=='0')other.value='';
-  if(inp.value!==''&&(inp.value.length===2||inp.value!=='1')){const n=document.querySelector(`input[data-g="${inp.dataset.g}"][data-k="${+inp.dataset.k+1}"][data-r="${inp.dataset.r}"]`);if(n&&!n.disabled)n.focus()}
+  if(scoreDone(inp.value)){const n=document.querySelector(`input[data-g="${inp.dataset.g}"][data-k="${+inp.dataset.k+1}"][data-r="${inp.dataset.r}"]`);if(n&&!n.disabled)n.focus()}
   lgRefresh()}
 // המערכות של המשחקים הפתוחים נקראות מהמסך (מספרים שעוד לא נשמרו כבר נספרים); שאר המשחקים מהמצב השמור
 function lgLive(){const L=lgL();const us=L.home?0:1;return L.games.map((g,gi)=>{if(!document.querySelector(`input[data-g="${gi}"]`))return g;return {sets:[0,1,2,3,4].map(k=>{const a=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="0"]`),b=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="1"]`);if(a.value===''&&b.value==='')return null;const o=[+a.value,+b.value];return us===0?o:[o[1],o[0]]})}})}
@@ -2061,16 +2063,19 @@ function lgRefresh(){const L=lgL();const us=L.home?0:1;const live=lgLive();
 }
 
 /* ========================= CLOUD (Firebase) ========================= */
-let USER=null,PROFILE=null,TID=null,unsubT=null,unsubList=null,LIST=[],cloudT=null;
+let USER=null,PROFILE=null,TID=null,unsubT=null,unsubList=null,LIST=[],cloudT=null,BOOTED=false;
 const CLIENT=uid();
 window.addEventListener('fb-ready',()=>{
   if(VIEW){FB.onSnapshot(FB.doc(FB.db,'tournamentsPublic',VIEW),snap=>{if(!snap.exists()||!snap.data().state){document.getElementById('app').innerHTML='<div class="card login"><h2>הקישור לא פעיל</h2><p class="muted">התחרות לא פתוחה לצפייה כרגע.</p></div>';return}
       try{S=Object.assign(fresh(),JSON.parse(snap.data().state));render()}catch(e){console.error(e)}},e=>{console.error(e);document.getElementById('app').innerHTML='<div class="card login"><h2>אין גישה</h2></div>'});return}
-  FB.onAuthStateChanged(FB.auth,async u=>{USER=u;PROFILE=null;
+  FB.onAuthStateChanged(FB.auth,async u=>{const warm=BOOTED&&u&&u.uid===USER.uid;BOOTED=false;USER=u;if(!warm)PROFILE=null;
+    try{if(u)localStorage.setItem(KEY+'.uid',u.uid);else localStorage.removeItem(KEY+'.uid')}catch(e){}
     const PK=KEY+'.profile.'+(u&&u.uid);let cached=null;if(u)try{cached=JSON.parse(localStorage.getItem(PK)||'null')}catch(e){}
     // הפרופיל מהמכשיר מאפשר להיכנס מיד; הגרסה מהענן מתעדכנת ברקע (וכללי Firestore אוכפים הרשאות בכל מקרה)
     const fetchP=u?FB.getDoc(FB.doc(FB.db,'users',u.uid)).then(d=>{const p=d.exists()?d.data():null;try{localStorage.setItem(PK,JSON.stringify(p))}catch(e){}return p}).catch(()=>cached):null;
     if(u){if(cached){PROFILE=cached;fetchP.then(p=>{if(USER===u&&JSON.stringify(p)!==JSON.stringify(PROFILE)){PROFILE=p;if(!p){closeTournament(true)}render()}})}else PROFILE=await fetchP}
+    // המסך כבר פתוח מהמכשיר: רק מתחברים לענן, בלי לבנות אותו מחדש (שלא יימחק מה שמוקלד עכשיו)
+    if(warm&&PROFILE){if(TID)listenT(TID);else{watchList();render()}if(syncState==='pending')scheduleCloud();return}
     if(unsubList){unsubList();unsubList=null}
     closeTournament(true);
     if(u&&PROFILE){if(!unsubList)watchList();
@@ -2079,6 +2084,7 @@ window.addEventListener('fb-ready',()=>{
     render();});
 });
 function watchList(){
+  if(!window.FB)return;
   const q=FB.query(FB.collection(FB.db,'tournaments'),FB.orderBy('date','desc'));
   unsubList=FB.onSnapshot(q,snap=>{LIST=snap.docs.filter(d=>d.id!=='zz-connection-test').map(d=>({id:d.id,...d.data()}));if(!TID)render()},
     e=>{console.error(e);syncErr=e;setSync('error');if(!TID)render()});
@@ -2130,11 +2136,16 @@ async function openTournament(id){
   TID=id;const cached=localStorage.getItem(KEY+'.'+id);if(cached){try{S=Object.assign(fresh(),JSON.parse(cached))}catch(e){}}
   localView=!!cached;lastSig=stSig();try{localStorage.setItem(KEY+'.last',id)}catch(e){}
   CLOUD_REV=null;try{const b=localStorage.getItem(KEY+'.'+id+'.base');if(b!==null&&b!==''&&!isNaN(+b))CLOUD_REV=+b}catch(e){}
+  listenT(id);
+  render();
+}
+function listenT(id){
   const ref=FB.doc(FB.db,'tournaments',id);
   if(unsubList){unsubList();unsubList=null}
   if(unsubT)unsubT();
   unsubT=FB.onSnapshot(ref,snap=>{
-    if(!snap.exists()){if(id===PENDING_NEW)return;closeTournament();toast('התחרות נמחקה');return}
+    // מסמך שחסר רק במטמון (קליטה גרועה, מכשיר חדש) לא אומר שהתחרות נמחקה
+    if(!snap.exists()){if(id===PENDING_NEW||(snap.metadata&&snap.metadata.fromCache))return;closeTournament();toast('התחרות נמחקה');return}
     const d=snap.data();if(!d.state)return;const cache=!!(snap.metadata&&snap.metadata.fromCache);
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
     if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{applyCloud(id,d.state,Math.max(S.rev||0,d.rev||0),d.rev||0)}catch(e){console.error(e)}}
@@ -2142,7 +2153,6 @@ async function openTournament(id){
     if(!cache)setSync('saved');
   },e=>{console.error(e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('אין גישה לענן. עובדים מהמכשיר.',{label:'בדיקה',fn:diagnostics})}});
-  render();
 }
 function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(!unsubList&&USER&&PROFILE&&!VIEW)watchList();if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent){try{localStorage.removeItem(KEY+'.last')}catch(e){}render()}}
 // מצב מהענן: הלשונית והמסך נשארים של המכשיר הזה; חלון תוצאה פתוח נסגר רק אם המשחק שבו השתנה; מה שמוקלד במסך נשאר
@@ -2206,7 +2216,7 @@ function scheduleCloud(){setSync('pending');clearTimeout(cloudT);cloudT=setTimeo
    של אותו מכשיר ולהחזיר את הענן אחורה. התוכן נלכד ברגע הקריאה; שמירה שממתינה בתור מתעדכנת לתוכן האחרון. */
 let pushChain=Promise.resolve();const pushQ=new Map();
 function pushCloud(force){
-  if(!TID||!USER)return Promise.resolve(false);cloudT=null;clearTimeout(retryT);
+  if(!TID||!USER||BOOTED)return Promise.resolve(false);cloudT=null;clearTimeout(retryT); // בפתיחה מהמכשיר השמירה מחכה להתחברות
   if(!navigator.onLine){setSync('offline');scheduleRetry();return Promise.resolve(false)}
   setSync('saving');
   const body={name:S.settings.name||'',date:S.settings.date||'',system:S.settings.system,phase:progPhase(),playersCount:S.players.length,rev:S.rev||0,client:CLIENT,state:JSON.stringify(S),updatedAt:Date.now(),updatedBy:USER.uid,updatedByName:(PROFILE&&PROFILE.name)||USER.email||''};
@@ -2395,7 +2405,15 @@ let toastT=null;
 function toast(msg,action){const t=document.getElementById('toast');t.innerHTML=`<div class="toast"><span>${esc(msg)}</span>${action?`<button id="toastBtn">${action.label}</button>`:''}</div>`;if(action)document.getElementById('toastBtn').onclick=action.fn;clearTimeout(toastT);toastT=setTimeout(hideToast,action?10000:3000)}
 function hideToast(){document.getElementById('toast').innerHTML=''}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+// פתיחה בלי לחכות לרשת: מציגים מיד את התחרות האחרונה מהמכשיר. Firebase וההתחברות מצטרפים ברקע.
+// shortcut: בחצי השנייה עד שספריית Firebase נטענת, ייבוא שחקנים ומחיקה לא זמינים; שדרוג רק אם זה יפריע בפועל
+function bootCached(){if(VIEW)return;try{const uid=localStorage.getItem(KEY+'.uid'),last=localStorage.getItem(KEY+'.last');if(!uid||!last)return;
+  const prof=JSON.parse(localStorage.getItem(KEY+'.profile.'+uid)||'null'),st=JSON.parse(localStorage.getItem(KEY+'.'+last)||'null');if(!prof||!st)return;
+  USER={uid,email:''};PROFILE=prof;TID=last;S=Object.assign(fresh(),st);localView=true;lastSig=stSig();
+  const b=localStorage.getItem(KEY+'.'+last+'.base');CLOUD_REV=b!==null&&b!==''&&!isNaN(+b)?+b:null;BOOTED=true}catch(e){USER=PROFILE=TID=null;BOOTED=false;S=fresh()}}
+bootCached();
 render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
