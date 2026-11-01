@@ -1962,7 +1962,7 @@ function resetAll(){if(!confirm('לאפס את כל הנתונים של התחר
 // shortcut: הסגל קבוע בקוד, לעדכן כאן כשמצטרף שחקן
 const LEAGUE_ROSTER=['עדי לוי','אלעזר שנקר','יבגני ז\'וטובסקי','עומר סיטון','דניאל בן אהרון','דור נברו','אביב לזר'];
 const LG_ORDER=[null,[0,1],[1,0],[2,2],[0,0],[2,1],[1,2]]; // [אינדקס מארחת, אינדקס אורחת]; null = זוגות
-function lgFresh(){return {step:'lineup',lg:'ליגה לאומית',usName:'הפועל מבואות חרמון M1',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
+function lgFresh(){return {step:'lineup',lg:'ליגה לאומית',usName:'',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
 function lgL(){if(!S.league)S.league=lgFresh();return S.league}
 function lgSetsWon(g){let h=0,a=0;(g.sets||[]).forEach(s=>{if(s&&validSet(s[0],s[1])){if(s[0]>s[1])h++;else a++}});return [h,a]}
 function lgGameWinner(g){const [h,a]=lgSetsWon(g);return h>=3?0:a>=3?1:null}
@@ -1989,22 +1989,21 @@ function renderLeagueLineup(app){
   <div class="card stack">
     <div><label>ליגה</label><input list="lgLeagues" value="${esc(L.lg||'ליגה לאומית')}" onchange="lgMeta('lg',this.value.trim())"></div>
     <div class="grid2">
-      <div><label>הקבוצה שלנו</label><input value="${esc(L.usName)}" onchange="lgMeta('usName',this.value)"></div>
-      <div><label>קבוצה יריבה</label><input id="lg_opp" value="${esc(L.opp)}" placeholder="למשל: הפועל חיפה M2" onchange="lgMeta('opp',this.value)"></div>
+      <div><label>${L.home?'קבוצה מארחת':'קבוצה אורחת'}</label><input value="${esc(L.usName)}" onchange="lgMeta('usName',this.value)"></div>
+      <div><label>${L.home?'קבוצה אורחת':'קבוצה מארחת'}</label><input id="lg_opp" value="${esc(L.opp)}" onchange="lgMeta('opp',this.value)"></div>
     </div>
     <div class="grid2">
-      <div><label>מגרש</label><div class="seg"><button class="${L.home?'on':''}" onclick="lgMeta('home',true)">בית</button><button class="${L.home?'':'on'}" onclick="lgMeta('home',false)">חוץ</button></div></div>
       <div><label>תאריך</label><input type="date" value="${esc(S.settings.date)}" onchange="lgMeta('date',this.value)"></div>
       <div><label>שעה</label><input type="time" value="${esc(L.time)}" onchange="lgMeta('time',this.value)"></div>
       <div><label>מספר משחק באתר האיגוד</label><input inputmode="numeric" value="${esc(L.mid)}" onchange="lgMeta('mid',this.value)"></div>
     </div>
   </div>
   <div class="card lg-lineup stack">
-    <h2>${esc(L.usName)} <span class="tiny">${us===0?'A, B, C':'X, Y, Z'}</span></h2>
+    <h2>${esc(L.usName)||(L.home?'קבוצה מארחת':'קבוצה אורחת')} <span class="tiny">${us===0?'A, B, C':'X, Y, Z'}</span></h2>
     ${[0,1,2].map(i=>`<div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">${lgLetter(us,i)}</b><input list="lgRoster" value="${esc(L.us[i])}" placeholder="שם" onchange="lgName('us',${i},this.value)"><input class="lg-tz" inputmode="numeric" value="${esc(tz[L.us[i]]||'')}" placeholder="ת&quot;ז" ${L.us[i]?'':'disabled'} onchange="lgTZSet('${ja(L.us[i])}',this.value.trim())"></div>`).join('')}
     <div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">זוג</b>${pick(L.us,0,"lgName('usD',0,this.value)")}${pick(L.us,1,"lgName('usD',1,this.value)")}</div>
-    <h2 style="margin-top:18px">${esc(L.opp)||'היריבה'} <span class="tiny">${them===0?'A, B, C':'X, Y, Z'}</span></h2>
-    ${[0,1,2].map(i=>`<div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">${lgLetter(them,i)}</b><input value="${esc(L.them[i])}" placeholder="שם" onchange="lgName('them',${i},this.value)"></div>`).join('')}
+    <h2 style="margin-top:18px">${esc(L.opp)||(L.home?'קבוצה אורחת':'קבוצה מארחת')} <span class="tiny">${them===0?'A, B, C':'X, Y, Z'}</span></h2>
+    ${[0,1,2].map(i=>`<div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">${lgLetter(them,i)}</b><input list="lgRoster" value="${esc(L.them[i])}" placeholder="שם" onchange="lgName('them',${i},this.value)"></div>`).join('')}
     <div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">זוג</b>${pick(L.them,0,"lgName('themD',0,this.value)")}${pick(L.them,1,"lgName('themD',1,this.value)")}</div>
   </div>
   <div class="row" style="margin-top:18px"><button class="primary big" style="flex:1 1 200px" ${ready?'':'disabled'} onclick="lgMeta('step','form')">בנה טופס</button>${canDelete()?'<button class="danger" onclick="deleteTournament()">מחיקה</button>':''}</div>`;
@@ -2012,24 +2011,24 @@ function renderLeagueLineup(app){
 function renderLeagueForm(app){
   const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=sc[us?'a':'h'],theirs=sc[us?'h':'a'];const open=lgOpen(),cl=L.closed||[];
   app.innerHTML=`<div class="row" style="justify-content:space-between"><h1>${esc(L.usName)} – ${esc(L.opp)}</h1><button class="ghost" onclick="lgMeta('step','lineup')">הרכב</button></div>
-  <div class="tiny">${esc(L.lg||'ליגה לאומית')} · ${L.home?'בית':'חוץ'}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
+  <div class="tiny">${esc(L.lg||'ליגה לאומית')}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
   <div class="row" style="margin-top:10px"><button class="outline" onclick="openPublic()">מסך מגרשים</button><label class="chip ${S.settings.publicLink?'on':''}"><input type="checkbox" ${S.settings.publicLink?'checked':''} onchange="S.settings.publicLink=this.checked;commit()">קישור צפייה</label>${S.settings.publicLink?`<button class="ghost" onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">העתקת קישור</button>`:''}</div>
   <div class="card" style="margin-top:12px"><div class="lg-score"><div>${esc(L.usName)}<div class="n" id="lgUs">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n" id="lgThem">${theirs}</div></div></div><div class="tiny" id="lgStatus" style="text-align:center;margin-top:6px"></div></div>
   <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'} · שולחן ${lgTableNo(gi)}`;
     if(!open.includes(gi)){const w=lgGameWinner(g);const [h,a]=lgSetsWon(g);const mine=us===0?[h,a]:[a,h];
-      return `<div class="card lg-game ${cl.includes(gi)?'':'wait'}"><h3><span>${title}</span><span class="tag">${w===null?'':w===us?'ניצחון':'הפסד'}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${cl.includes(gi)||w!==null?`<span class="sw">${mine[0]}:${mine[1]}</span><button class="ghost" onclick="lgReopen(${gi})">פתח</button>`:''}</div></div>`}
+      return `<div class="card lg-game ${cl.includes(gi)?'':'wait'}"><h3><span>${title}</span><span class="tag">${w===null?'':esc(w===us?L.usName:L.opp)}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${cl.includes(gi)||w!==null?`<span class="sw">${mine[0]}:${mine[1]}</span><button class="ghost" onclick="lgReopen(${gi})">פתח</button>`:''}</div></div>`}
     const row=(side,r)=>`<div class="lg-row" data-g="${gi}" data-r="${r}"><div class="nm">${esc(lgSideName(side,gi))}</div>${[0,1,2,3,4].map(k=>{const s=g.sets[k];const v=s?s[side]:null;return `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" value="${v==null?'':v}" data-g="${gi}" data-k="${k}" data-r="${r}" oninput="lgInput(this)" onchange="lgChange()" onfocus="this.select()">`}).join('')}<div class="sw"></div></div>`;
     return `<div class="card lg-game open" data-game="${gi}"><h3><span>${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}<div class="row" style="margin-top:8px"><button class="primary" id="lgDone${gi}" onclick="lgClose(${gi})">סיום המשחק</button></div></div>`}).join('')}</div>`;
   lgRefresh();
 }
-function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.lg||'ליגה לאומית')+' · '+(L.home?'בית':'חוץ')+(L.opp?' מול '+L.opp:'');commit()}
+function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.lg||'ליגה לאומית')+' · '+[L.home?L.usName:L.opp,L.home?L.opp:L.usName].filter(Boolean).join(' – ');commit()}
 // לוח מגרשים לקריאה בלבד: המשחקים שרצים עכשיו לפי שולחן, ומתחת כל שבעת המשחקים. משמש את קישור הצפייה ואת מסך המגרש
 function lgCourts(){const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=us?sc.a:sc.h,theirs=us?sc.h:sc.a;
   const mine=g=>{const [h,a]=lgSetsWon(g);return us===0?[h,a]:[a,h]};const sets=g=>(g.sets||[]).filter(Boolean).map(s=>us===0?s[0]+'-'+s[1]:s[1]+'-'+s[0]).join(' · ');
   const live=sc.done?[]:lgOpen().filter(gi=>lgGameWinner(L.games[gi])===null);
-  return `<div class="card"><div class="lg-score"><div>${esc(L.usName)}<div class="n ${sc.done&&ours>theirs?'win':''}">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n ${sc.done&&theirs>ours?'win':''}">${theirs}</div></div></div>${sc.done?`<div class="tiny" style="text-align:center">${ours>theirs?'ניצחנו':'הפסדנו'} · המפגש הסתיים</div>`:''}</div>
+  return `<div class="card"><div class="lg-score"><div>${esc(L.usName)}<div class="n ${sc.done&&ours>theirs?'win':''}">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n ${sc.done&&theirs>ours?'win':''}">${theirs}</div></div></div>${sc.done?`<div class="tiny" style="text-align:center">${esc(ours>theirs?L.usName:L.opp)} ניצחה · המפגש הסתיים</div>`:''}</div>
   ${live.length?`<div class="tables" style="margin-top:14px">${live.map(gi=>{const g=L.games[gi];const m=mine(g);return `<div class="table"><div class="tnum"><span>שולחן ${lgTableNo(gi)}</span><span>משחק ${gi+1}</span></div><div class="players">${esc(lgSideName(us,gi))}<span class="vs">${m[0]} : ${m[1]}</span>${esc(lgSideName(them,gi))}</div><div class="meta"><span>${sets(g)}</span></div></div>`}).join('')}</div>`:''}
-  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const w=lgGameWinner(g);const m=mine(g);return `<div class="card lg-game ${w===null&&!live.includes(gi)?'wait':''}"><h3><span>${gi+1} · שולחן ${lgTableNo(gi)}</span><span class="tag">${w===null?(live.includes(gi)?'משחקים עכשיו':''):w===us?'ניצחון':'הפסד'}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${w!==null?`<span class="sw">${m[0]}:${m[1]}</span>`:''}</div></div>`}).join('')}</div>`}
+  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const w=lgGameWinner(g);const m=mine(g);return `<div class="card lg-game ${w===null&&!live.includes(gi)?'wait':''}"><h3><span>${gi+1} · שולחן ${lgTableNo(gi)}</span><span class="tag">${w===null?(live.includes(gi)?'משחקים עכשיו':''):esc(w===us?L.usName:L.opp)}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${w!==null?`<span class="sw">${m[0]}:${m[1]}</span>`:''}</div></div>`}).join('')}</div>`}
 function lgName(k,i,v){const L=lgL();v=v.trim();L[k][i]=v;if(k==='us'||k==='them'){const d=L[k+'D'];d.forEach((n,j)=>{if(n&&!L[k].includes(n))d[j]=''})}commit()}
 function lgClose(gi){lgChange();const L=lgL();if(lgGameWinner(L.games[gi])===null)return;L.closed=[...new Set([...(L.closed||[]),gi])];commit()}
 function lgReopen(gi){const L=lgL();L.closed=(L.closed||[]).filter(x=>x!==gi);commit()}
@@ -2046,12 +2045,12 @@ function lgRefresh(){const L=lgL();const us=L.home?0:1;const live=lgLive();
   let ours=0,theirs=0;const won=live.map(g=>{const w=lgGameWinner(g);if(w!==null){if(w===us)ours++;else theirs++}return w});const done=ours>=4||theirs>=4;
   live.forEach((g,gi)=>{const card=document.querySelector(`.lg-game[data-game="${gi}"]`);if(!card)return;const [h,a]=lgSetsWon(g);const w=won[gi];const mine=us===0?[h,a]:[a,h];
     card.querySelectorAll('.lg-row').forEach((r,i)=>{r.querySelector('.sw').textContent=mine[i];r.classList.toggle('win',w!==null&&(w===us)===(i===0))});
-    card.querySelector('.tag').textContent=w===null?'':(w===us?'ניצחון':'הפסד');
+    card.querySelector('.tag').textContent=w===null?'':(w===us?L.usName:L.opp);
     document.getElementById('lgDone'+gi).disabled=w===null;
     card.querySelectorAll('input').forEach(inp=>{const s=g.sets[+inp.dataset.k];inp.disabled=w!==null&&!s;inp.classList.toggle('bad',!!s&&!validSet(s[0],s[1])&&inp.value!=='')})});
   document.getElementById('lgUs').textContent=ours;document.getElementById('lgThem').textContent=theirs;
   document.getElementById('lgUs').classList.toggle('win',done&&ours>theirs);document.getElementById('lgThem').classList.toggle('win',done&&theirs>ours);
-  document.getElementById('lgStatus').textContent=done?(ours>theirs?'ניצחנו':'הפסדנו')+' · המפגש הסתיים':'';
+  document.getElementById('lgStatus').textContent=done?(ours>theirs?L.usName:L.opp)+' ניצחה · המפגש הסתיים':'';
 }
 
 /* ========================= CLOUD (Firebase) ========================= */
