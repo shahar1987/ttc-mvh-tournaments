@@ -1962,7 +1962,7 @@ function resetAll(){if(!confirm('לאפס את כל הנתונים של התחר
 // shortcut: הסגל קבוע בקוד, לעדכן כאן כשמצטרף שחקן
 const LEAGUE_ROSTER=['עדי לוי','אלעזר שנקר','יבגני ז\'וטובסקי','עומר סיטון','דניאל בן אהרון','דור נברו','אביב לזר'];
 const LG_ORDER=[null,[0,1],[1,0],[2,2],[0,0],[2,1],[1,2]]; // [אינדקס מארחת, אינדקס אורחת]; null = זוגות
-function lgFresh(){return {step:'lineup',lg:'ליגה לאומית',usName:'',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
+function lgFresh(){return {step:'lineup',lg:'',usName:'',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
 function lgL(){if(!S.league)S.league=lgFresh();return S.league}
 function lgSetsWon(g){let h=0,a=0;(g.sets||[]).forEach(s=>{if(s&&validSet(s[0],s[1])){if(s[0]>s[1])h++;else a++}});return [h,a]}
 function lgGameWinner(g){const [h,a]=lgSetsWon(g);return h>=3?0:a>=3?1:null}
@@ -1974,7 +1974,6 @@ function lgSideName(side,gi){const o=LG_ORDER[gi];const n=lgNames(side);if(!o)re
 function lgTZ(){try{return JSON.parse(localStorage.getItem(KEY+'.tz')||'{}')}catch(e){return {}}}
 function lgTZSet(name,v){const m=lgTZ();if(v)m[name]=v;else delete m[name];try{localStorage.setItem(KEY+'.tz',JSON.stringify(m))}catch(e){}}
 const LG_ROUNDS=[[0],[1,2,3],[4,5,6]]; // זוגות לבד, ואז שלושה יחידים במקביל על שלושה שולחנות
-const LG_LEAGUES=['ליגה לאומית','ליגה ארצית','ליגה א\'','ליגה ב\'','ליגת נוער','ליגת נערים','ליגת ילדים','ליגת נשים'];
 function lgTableNo(gi){const r=LG_ROUNDS.find(x=>x.includes(gi));return r.indexOf(gi)+1}
 // משחק פתוח: לא נסגר, וכל המשחקים בסבבים שלפניו כבר הוכרעו. משחק שנפתח מחדש לתיקון נשאר פתוח גם אחרי סוף המפגש
 function lgOpen(){const L=lgL();const cl=L.closed||[];const done=lgTeamScore().done;
@@ -1985,9 +1984,9 @@ function renderLeagueLineup(app){
   const tz=lgTZ();const dl=`<datalist id="lgRoster">${LEAGUE_ROSTER.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
   const pick=(arr,i,ch)=>`<select onchange="${ch}">${['',...arr.filter(Boolean)].map(n=>`<option value="${esc(n)}" ${n===(arr===L.us?L.usD:L.themD)[i]?'selected':''}>${esc(n)||'—'}</option>`).join('')}</select>`;
   const ready=L.opp&&L.us.every(Boolean)&&L.them.every(Boolean)&&L.usD.every(Boolean)&&L.themD.every(Boolean);
-  app.innerHTML=`${dl}<datalist id="lgLeagues">${LG_LEAGUES.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><h1>משחק ליגה</h1>
+  app.innerHTML=`${dl}<h1>משחק ליגה</h1>
   <div class="card stack">
-    <div><label>ליגה</label><input list="lgLeagues" value="${esc(L.lg||'ליגה לאומית')}" onchange="lgMeta('lg',this.value.trim())"></div>
+    <div><label>ליגה</label><input value="${esc(L.lg||'')}" onchange="lgMeta('lg',this.value.trim())"></div>
     <div class="grid2">
       <div><label>${L.home?'קבוצה מארחת':'קבוצה אורחת'}</label><input value="${esc(L.usName)}" onchange="lgMeta('usName',this.value)"></div>
       <div><label>${L.home?'קבוצה אורחת':'קבוצה מארחת'}</label><input id="lg_opp" value="${esc(L.opp)}" onchange="lgMeta('opp',this.value)"></div>
@@ -2011,7 +2010,7 @@ function renderLeagueLineup(app){
 function renderLeagueForm(app){
   const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=sc[us?'a':'h'],theirs=sc[us?'h':'a'];const open=lgOpen(),cl=L.closed||[];
   app.innerHTML=`<div class="row" style="justify-content:space-between"><h1>${esc(L.usName)} – ${esc(L.opp)}</h1><button class="ghost" onclick="lgMeta('step','lineup')">הרכב</button></div>
-  <div class="tiny">${esc(L.lg||'ליגה לאומית')}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
+  <div class="tiny">${[L.lg,L.time,L.mid&&'משחק '+L.mid].filter(Boolean).map(esc).join(' · ')}</div>
   <div class="row" style="margin-top:10px"><button class="outline" onclick="openPublic()">מסך מגרשים</button><label class="chip ${S.settings.publicLink?'on':''}"><input type="checkbox" ${S.settings.publicLink?'checked':''} onchange="S.settings.publicLink=this.checked;commit()">קישור צפייה</label>${S.settings.publicLink?`<button class="ghost" onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">העתקת קישור</button>`:''}</div>
   <div class="card" style="margin-top:12px"><div class="lg-score"><div>${esc(L.usName)}<div class="n" id="lgUs">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n" id="lgThem">${theirs}</div></div></div><div class="tiny" id="lgStatus" style="text-align:center;margin-top:6px"></div></div>
   <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'} · שולחן ${lgTableNo(gi)}`;
@@ -2021,7 +2020,7 @@ function renderLeagueForm(app){
     return `<div class="card lg-game open" data-game="${gi}"><h3><span>${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}<div class="row" style="margin-top:8px"><button class="primary" id="lgDone${gi}" onclick="lgClose(${gi})">סיום המשחק</button></div></div>`}).join('')}</div>`;
   lgRefresh();
 }
-function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.lg||'ליגה לאומית')+' · '+[L.home?L.usName:L.opp,L.home?L.opp:L.usName].filter(Boolean).join(' – ');commit()}
+function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=[L.lg,[L.home?L.usName:L.opp,L.home?L.opp:L.usName].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')||'משחק ליגה';commit()}
 // לוח מגרשים לקריאה בלבד: המשחקים שרצים עכשיו לפי שולחן, ומתחת כל שבעת המשחקים. משמש את קישור הצפייה ואת מסך המגרש
 function lgCourts(){const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=us?sc.a:sc.h,theirs=us?sc.h:sc.a;
   const mine=g=>{const [h,a]=lgSetsWon(g);return us===0?[h,a]:[a,h]};const sets=g=>(g.sets||[]).filter(Boolean).map(s=>us===0?s[0]+'-'+s[1]:s[1]+'-'+s[0]).join(' · ');
@@ -2319,7 +2318,7 @@ function publicState(st){const short=n=>String(n||'').split('/').map(x=>{const w
 // מחיקת העותק הציבורי. מי שאין לו הרשאת מחיקה מרוקן אותו (הקישור מציג "לא פעיל")
 function pubOff(tid){if(!tid)return Promise.resolve();const ref=FB.doc(FB.db,'tournamentsPublic',tid);return FB.deleteDoc(ref).catch(()=>FB.setDoc(ref,{name:'',phase:'',state:'',updatedAt:Date.now()})).catch(e=>console.error('public off',e))}
 function renderView(app){
-  if(sys()==='league'){const L=lgL();app.innerHTML=`<h1>${esc(L.usName)} – ${esc(L.opp)}</h1><div class="tiny" style="margin-bottom:12px">${esc(L.lg||'ליגה לאומית')} · ${esc(S.settings.date)} · מתעדכן אוטומטית</div>`+lgCourts();return}
+  if(sys()==='league'){const L=lgL();app.innerHTML=`<h1>${esc(L.usName)} – ${esc(L.opp)}</h1><div class="tiny" style="margin-bottom:12px">${[L.lg,S.settings.date].filter(Boolean).map(esc).join(' · ')} · מתעדכן אוטומטית</div>`+lgCourts();return}
   const done=canFinish();const r=done?finalRanking():[];
   const pod=done?`<div class="podium"><div class="pod p2"><div class="name">${esc(r[1]?.p.name||'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${esc(r[0]?.p.name||'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${esc(r[2]?.p.name||'')}</div><div class="block">3</div></div></div>`:'';
   const secs=(done?['table','results']:['now','next','table','results']).map(sc=>`<div class="card" style="margin-bottom:14px">${pubBody(sc)}</div>`).join('');
