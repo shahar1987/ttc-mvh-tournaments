@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com https://www.gstatic.com; manifest-src 'self'; worker-src 'self'; frame-src https://ttcmh-2a752.firebaseapp.com https://www.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>תן לי שולחן — מועדון טניס שולחן מבואות החרמון</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#1B2A41">
@@ -2028,13 +2029,13 @@ function lgFormHTML(){
   <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'} · שולחן ${lgTableNo(gi)}`;
     if(cl.includes(gi)){const w=lgGameWinner(g);const [h,a]=lgSetsWon(g);const mine=us===0?[h,a]:[a,h];
       return `<div class="card lg-game"><h3><span>${title}</span><span class="tag">${w===null?'':esc((w===us?L.usName:L.opp)||lgSlot(w,gi).lt)}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${lgSlotHTML(us,gi)} <b>נגד</b> ${lgSlotHTML(them,gi)}</span><span class="sw">${mine[0]}:${mine[1]}</span><button class="ghost" onclick="lgReopen(${gi})">פתח</button></div></div>`}
-    const row=(side,r)=>`<div class="lg-row" data-g="${gi}" data-r="${r}"><div class="nm">${lgSlotHTML(side,gi)}</div>${[0,1,2,3,4].map(k=>{const s=g.sets[k];const v=s?s[side]:null;return `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" value="${v==null?'':v}" data-g="${gi}" data-k="${k}" data-r="${r}" oninput="lgInput(this)" onchange="lgChange()" onfocus="this.select()">`}).join('')}<div class="sw"></div></div>`;
+    const row=(side,r)=>`<div class="lg-row" data-g="${gi}" data-r="${r}"><div class="nm">${lgSlotHTML(side,gi)}</div>${[0,1,2,3,4].map(k=>{const s=g.sets[k];const v=s?s[side]:null;return `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" value="${esc(v??'')}" data-g="${gi}" data-k="${k}" data-r="${r}" oninput="lgInput(this)" onchange="lgChange()" onfocus="this.select()">`}).join('')}<div class="sw"></div></div>`;
     return `<div class="card lg-game" data-game="${gi}"><h3><span>${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}<div class="row" style="margin-top:8px"><button class="primary" id="lgDone${gi}" onclick="lgClose(${gi})">סיום המשחק</button></div></div>`}).join('')}</div>`;
 }
 function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=[L.lg,[L.home?L.usName:L.opp,L.home?L.opp:L.usName].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')||'משחק ליגה';commit()}
 // לוח מגרשים לקריאה בלבד: המשחקים שרצים עכשיו לפי שולחן, ומתחת כל שבעת המשחקים. משמש את קישור הצפייה ואת מסך המגרש
 function lgCourts(){const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=us?sc.a:sc.h,theirs=us?sc.h:sc.a;
-  const mine=g=>{const [h,a]=lgSetsWon(g);return us===0?[h,a]:[a,h]};const sets=g=>(g.sets||[]).filter(Boolean).map(s=>us===0?s[0]+'-'+s[1]:s[1]+'-'+s[0]).join(' · ');
+  const mine=g=>{const [h,a]=lgSetsWon(g);return us===0?[h,a]:[a,h]};const sets=g=>(g.sets||[]).filter(Boolean).map(s=>esc(us===0?s[0]+'-'+s[1]:s[1]+'-'+s[0])).join(' · ');
   const live=sc.done?[]:lgOpen().filter(gi=>lgGameWinner(L.games[gi])===null);
   return `<div class="card"><div class="lg-score"><div>${esc(L.usName)}<div class="n ${sc.done&&ours>theirs?'win':''}">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n ${sc.done&&theirs>ours?'win':''}">${theirs}</div></div></div>${sc.done?`<div class="tiny" style="text-align:center">${esc(ours>theirs?L.usName:L.opp)} ניצחה · המפגש הסתיים</div>`:''}</div>
   ${live.length?`<div class="tables" style="margin-top:14px">${live.map(gi=>{const g=L.games[gi];const m=mine(g);return `<div class="table"><div class="tnum"><span>שולחן ${lgTableNo(gi)}</span><span>משחק ${gi+1}</span></div><div class="players">${esc(lgSideName(us,gi))}<span class="vs">${m[0]} : ${m[1]}</span>${esc(lgSideName(them,gi))}</div><div class="meta"><span>${sets(g)}</span></div></div>`}).join('')}</div>`:''}
