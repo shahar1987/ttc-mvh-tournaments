@@ -1962,7 +1962,7 @@ function resetAll(){if(!confirm('לאפס את כל הנתונים של התחר
 // shortcut: הסגל קבוע בקוד, לעדכן כאן כשמצטרף שחקן
 const LEAGUE_ROSTER=['עדי לוי','אלעזר שנקר','יבגני ז\'וטובסקי','עומר סיטון','דניאל בן אהרון','דור נברו','אביב לזר'];
 const LG_ORDER=[null,[0,1],[1,0],[2,2],[0,0],[2,1],[1,2]]; // [אינדקס מארחת, אינדקס אורחת]; null = זוגות
-function lgFresh(){return {step:'lineup',usName:'הפועל מבואות חרמון M1',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
+function lgFresh(){return {step:'lineup',lg:'ליגה לאומית',usName:'הפועל מבואות חרמון M1',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
 function lgL(){if(!S.league)S.league=lgFresh();return S.league}
 function lgSetsWon(g){let h=0,a=0;(g.sets||[]).forEach(s=>{if(s&&validSet(s[0],s[1])){if(s[0]>s[1])h++;else a++}});return [h,a]}
 function lgGameWinner(g){const [h,a]=lgSetsWon(g);return h>=3?0:a>=3?1:null}
@@ -1974,6 +1974,8 @@ function lgSideName(side,gi){const o=LG_ORDER[gi];const n=lgNames(side);if(!o)re
 function lgTZ(){try{return JSON.parse(localStorage.getItem(KEY+'.tz')||'{}')}catch(e){return {}}}
 function lgTZSet(name,v){const m=lgTZ();if(v)m[name]=v;else delete m[name];try{localStorage.setItem(KEY+'.tz',JSON.stringify(m))}catch(e){}}
 const LG_ROUNDS=[[0],[1,2,3],[4,5,6]]; // זוגות לבד, ואז שלושה יחידים במקביל על שלושה שולחנות
+const LG_LEAGUES=['ליגה לאומית','ליגה ארצית','ליגה א\'','ליגה ב\'','ליגת נוער','ליגת נערים','ליגת ילדים','ליגת נשים'];
+function lgTableNo(gi){const r=LG_ROUNDS.find(x=>x.includes(gi));return r.indexOf(gi)+1}
 // משחק פתוח: לא נסגר, וכל המשחקים בסבבים שלפניו כבר הוכרעו. משחק שנפתח מחדש לתיקון נשאר פתוח גם אחרי סוף המפגש
 function lgOpen(){const L=lgL();const cl=L.closed||[];const done=lgTeamScore().done;
   return L.games.map((g,gi)=>gi).filter(gi=>{if(cl.includes(gi))return false;if(done)return L.games[gi].sets.some(Boolean);const r=LG_ROUNDS.findIndex(x=>x.includes(gi));return LG_ROUNDS.slice(0,r).flat().every(j=>lgGameWinner(L.games[j])!==null)})}
@@ -1983,8 +1985,9 @@ function renderLeagueLineup(app){
   const tz=lgTZ();const dl=`<datalist id="lgRoster">${LEAGUE_ROSTER.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
   const pick=(arr,i,ch)=>`<select onchange="${ch}">${['',...arr.filter(Boolean)].map(n=>`<option value="${esc(n)}" ${n===(arr===L.us?L.usD:L.themD)[i]?'selected':''}>${esc(n)||'—'}</option>`).join('')}</select>`;
   const ready=L.opp&&L.us.every(Boolean)&&L.them.every(Boolean)&&L.usD.every(Boolean)&&L.themD.every(Boolean);
-  app.innerHTML=`${dl}<h1>משחק ליגה לאומית</h1>
+  app.innerHTML=`${dl}<datalist id="lgLeagues">${LG_LEAGUES.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><h1>משחק ליגה</h1>
   <div class="card stack">
+    <div><label>ליגה</label><input list="lgLeagues" value="${esc(L.lg||'ליגה לאומית')}" onchange="lgMeta('lg',this.value.trim())"></div>
     <div class="grid2">
       <div><label>הקבוצה שלנו</label><input value="${esc(L.usName)}" onchange="lgMeta('usName',this.value)"></div>
       <div><label>קבוצה יריבה</label><input id="lg_opp" value="${esc(L.opp)}" placeholder="למשל: הפועל חיפה M2" onchange="lgMeta('opp',this.value)"></div>
@@ -2009,16 +2012,24 @@ function renderLeagueLineup(app){
 function renderLeagueForm(app){
   const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=sc[us?'a':'h'],theirs=sc[us?'h':'a'];const open=lgOpen(),cl=L.closed||[];
   app.innerHTML=`<div class="row" style="justify-content:space-between"><h1>${esc(L.usName)} – ${esc(L.opp)}</h1><button class="ghost" onclick="lgMeta('step','lineup')">הרכב</button></div>
-  <div class="tiny">${L.home?'בית':'חוץ'}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
+  <div class="tiny">${esc(L.lg||'ליגה לאומית')} · ${L.home?'בית':'חוץ'}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
+  <div class="row" style="margin-top:10px"><button class="outline" onclick="openPublic()">מסך מגרשים</button><label class="chip ${S.settings.publicLink?'on':''}"><input type="checkbox" ${S.settings.publicLink?'checked':''} onchange="S.settings.publicLink=this.checked;commit()">קישור צפייה</label>${S.settings.publicLink?`<button class="ghost" onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">העתקת קישור</button>`:''}</div>
   <div class="card" style="margin-top:12px"><div class="lg-score"><div>${esc(L.usName)}<div class="n" id="lgUs">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n" id="lgThem">${theirs}</div></div></div><div class="tiny" id="lgStatus" style="text-align:center;margin-top:6px"></div></div>
-  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'}`;
+  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'} · שולחן ${lgTableNo(gi)}`;
     if(!open.includes(gi)){const w=lgGameWinner(g);const [h,a]=lgSetsWon(g);const mine=us===0?[h,a]:[a,h];
       return `<div class="card lg-game ${cl.includes(gi)?'':'wait'}"><h3><span>${title}</span><span class="tag">${w===null?'':w===us?'ניצחון':'הפסד'}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${cl.includes(gi)||w!==null?`<span class="sw">${mine[0]}:${mine[1]}</span><button class="ghost" onclick="lgReopen(${gi})">פתח</button>`:''}</div></div>`}
     const row=(side,r)=>`<div class="lg-row" data-g="${gi}" data-r="${r}"><div class="nm">${esc(lgSideName(side,gi))}</div>${[0,1,2,3,4].map(k=>{const s=g.sets[k];const v=s?s[side]:null;return `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" value="${v==null?'':v}" data-g="${gi}" data-k="${k}" data-r="${r}" oninput="lgInput(this)" onchange="lgChange()" onfocus="this.select()">`}).join('')}<div class="sw"></div></div>`;
     return `<div class="card lg-game open" data-game="${gi}"><h3><span>${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}<div class="row" style="margin-top:8px"><button class="primary" id="lgDone${gi}" onclick="lgClose(${gi})">סיום המשחק</button></div></div>`}).join('')}</div>`;
   lgRefresh();
 }
-function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.home?'בית':'חוץ')+(L.opp?' מול '+L.opp:'')+' · ליגה לאומית';commit()}
+function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.lg||'ליגה לאומית')+' · '+(L.home?'בית':'חוץ')+(L.opp?' מול '+L.opp:'');commit()}
+// לוח מגרשים לקריאה בלבד: המשחקים שרצים עכשיו לפי שולחן, ומתחת כל שבעת המשחקים. משמש את קישור הצפייה ואת מסך המגרש
+function lgCourts(){const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=us?sc.a:sc.h,theirs=us?sc.h:sc.a;
+  const mine=g=>{const [h,a]=lgSetsWon(g);return us===0?[h,a]:[a,h]};const sets=g=>(g.sets||[]).filter(Boolean).map(s=>us===0?s[0]+'-'+s[1]:s[1]+'-'+s[0]).join(' · ');
+  const live=sc.done?[]:lgOpen().filter(gi=>lgGameWinner(L.games[gi])===null);
+  return `<div class="card"><div class="lg-score"><div>${esc(L.usName)}<div class="n ${sc.done&&ours>theirs?'win':''}">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n ${sc.done&&theirs>ours?'win':''}">${theirs}</div></div></div>${sc.done?`<div class="tiny" style="text-align:center">${ours>theirs?'ניצחנו':'הפסדנו'} · המפגש הסתיים</div>`:''}</div>
+  ${live.length?`<div class="tables" style="margin-top:14px">${live.map(gi=>{const g=L.games[gi];const m=mine(g);return `<div class="table"><div class="tnum"><span>שולחן ${lgTableNo(gi)}</span><span>משחק ${gi+1}</span></div><div class="players">${esc(lgSideName(us,gi))}<span class="vs">${m[0]} : ${m[1]}</span>${esc(lgSideName(them,gi))}</div><div class="meta"><span>${sets(g)}</span></div></div>`}).join('')}</div>`:''}
+  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const w=lgGameWinner(g);const m=mine(g);return `<div class="card lg-game ${w===null&&!live.includes(gi)?'wait':''}"><h3><span>${gi+1} · שולחן ${lgTableNo(gi)}</span><span class="tag">${w===null?(live.includes(gi)?'משחקים עכשיו':''):w===us?'ניצחון':'הפסד'}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${w!==null?`<span class="sw">${m[0]}:${m[1]}</span>`:''}</div></div>`}).join('')}</div>`}
 function lgName(k,i,v){const L=lgL();v=v.trim();L[k][i]=v;if(k==='us'||k==='them'){const d=L[k+'D'];d.forEach((n,j)=>{if(n&&!L[k].includes(n))d[j]=''})}commit()}
 function lgClose(gi){lgChange();const L=lgL();if(lgGameWinner(L.games[gi])===null)return;L.closed=[...new Set([...(L.closed||[]),gi])];commit()}
 function lgReopen(gi){const L=lgL();L.closed=(L.closed||[]).filter(x=>x!==gi);commit()}
@@ -2075,7 +2086,7 @@ const PHASE_NAMES={setup:'הגדרות',players:'רישום',draw:'הגרלה',l
 // השלב לפי הנתונים (לרשימת התחרויות ולמכשיר שפותח את התחרות בפעם הראשונה), לא לפי המסך שפתוח במכשיר מסוים
 function progPhase(){if(sys()==='league')return lgTeamScore().done?'final':'league';if(canFinish())return 'final';if(S.koBuilt)return 'ko';if(S.matches.length)return 'live';if(S.groups.length&&sys()==='groups-ko')return 'draw';return S.players.length?'players':'setup'}
 function fmtDate(d){if(!d)return '';const x=new Date(d+'T12:00');if(isNaN(x))return d;const o={weekday:'long',day:'numeric',month:'long'};if(x.getFullYear()!==new Date().getFullYear())o.year='numeric';return x.toLocaleDateString('he-IL',o)}
-function tMeta(t){return [fmtDate(t.date),t.system==='league'?'ליגה לאומית':`${t.playersCount||0} שחקנים`,PHASE_NAMES[t.phase]||''].filter(Boolean).join(' · ')}
+function tMeta(t){return [fmtDate(t.date),t.system==='league'?'משחק ליגה':`${t.playersCount||0} שחקנים`,PHASE_NAMES[t.phase]||''].filter(Boolean).join(' · ')}
 // התחרות שמוצגת בגדול: זו שרצה עכשיו, אחרת הקרובה שעוד לא הסתיימה
 function heroTournament(){
   const open=LIST.filter(t=>t.phase!=='final');
@@ -2092,7 +2103,7 @@ function renderList(app){
   ${hero?`<div class="hero"><div class="lbl">${running?'התחרות שרצה עכשיו':'התחרות הקרובה'}</div><h2>${esc(hero.name||'ללא שם')}</h2><div class="meta">${esc(tMeta(hero))}</div><button class="primary big" data-tid="${esc(hero.id)}">כניסה לתחרות</button></div>`:''}
   ${rest.length?`${hero?'<div class="list-h">תחרויות נוספות</div>':''}<ul class="tlist">${rest.map(t=>`<li data-tid="${esc(t.id)}"><div><div class="tn">${esc(t.name||'ללא שם')}</div><div class="tm">${esc(tMeta(t))}</div></div><span class="chev">‹</span></li>`).join('')}</ul>`:''}
   ${LIST.length?'':`<div class="card muted" style="margin-bottom:14px">עדיין אין תחרויות. תחרות חדשה לוקחת דקה.</div>`}
-  <div class="row" style="margin-top:18px"><button class="${LIST.length?'outline':'primary'} big" style="flex:1 1 200px" onclick="newTournament()">+ תחרות חדשה</button><button class="outline big" style="flex:1 1 200px" onclick="newTournament('league')">+ משחק ליגה לאומית</button></div>`;
+  <div class="row" style="margin-top:18px"><button class="${LIST.length?'outline':'primary'} big" style="flex:1 1 200px" onclick="newTournament()">+ תחרות חדשה</button><button class="outline big" style="flex:1 1 200px" onclick="newTournament('league')">+ משחק ליגה</button></div>`;
   // בלי onclick עם מזהה בתוך המחרוזת: המזהה נקרא מ-data-* (dataset), כך ששם או מזהה זדוני לא יכול להריץ קוד.
   app.querySelectorAll('[data-tid]').forEach(el=>el.addEventListener('click',()=>openTournament(el.dataset.tid)));
 }
@@ -2100,7 +2111,7 @@ function renderList(app){
 function canDelete(){if(!PROFILE)return false;const perms=Array.isArray(PROFILE.permissions)?PROFILE.permissions:[];return String(PROFILE.role||'').toLowerCase()==='admin'||perms.includes('competitions')}
 async function newTournament(kind){
   const id=uid()+uid();S=fresh();S.rev=0;TID=id;CLOUD_REV=null;
-  if(kind==='league'){S.settings.system='league';S.settings.name='משחק ליגה לאומית';S.phase='league';S.league=lgFresh()}
+  if(kind==='league'){S.settings.system='league';S.settings.name='משחק ליגה';S.phase='league';S.league=lgFresh()}
   logEv('נפתחה תחרות חדשה','create');
   const ok=await pushCloud(true);if(!ok)PENDING_NEW=id;
   openTournament(id);localView=true;
@@ -2309,6 +2320,7 @@ function publicState(st){const short=n=>String(n||'').split('/').map(x=>{const w
 // מחיקת העותק הציבורי. מי שאין לו הרשאת מחיקה מרוקן אותו (הקישור מציג "לא פעיל")
 function pubOff(tid){if(!tid)return Promise.resolve();const ref=FB.doc(FB.db,'tournamentsPublic',tid);return FB.deleteDoc(ref).catch(()=>FB.setDoc(ref,{name:'',phase:'',state:'',updatedAt:Date.now()})).catch(e=>console.error('public off',e))}
 function renderView(app){
+  if(sys()==='league'){const L=lgL();app.innerHTML=`<h1>${esc(L.usName)} – ${esc(L.opp)}</h1><div class="tiny" style="margin-bottom:12px">${esc(L.lg||'ליגה לאומית')} · ${esc(S.settings.date)} · מתעדכן אוטומטית</div>`+lgCourts();return}
   const done=canFinish();const r=done?finalRanking():[];
   const pod=done?`<div class="podium"><div class="pod p2"><div class="name">${esc(r[1]?.p.name||'')}</div><div class="block">2</div></div><div class="pod p1"><div class="name">${esc(r[0]?.p.name||'')}</div><div class="block">1</div></div><div class="pod p3"><div class="name">${esc(r[2]?.p.name||'')}</div><div class="block">3</div></div></div>`:'';
   const secs=(done?['table','results']:['now','next','table','results']).map(sc=>`<div class="card" style="margin-bottom:14px">${pubBody(sc)}</div>`).join('');
@@ -2320,11 +2332,12 @@ let pubScreen=0;
 const PUB_SCREENS=['now','next','table','results'];
 function openPublic(){
   pubScreen=0;pubDraw();clearInterval(pubTimer);
-  pubTimer=setInterval(()=>{pubScreen=(pubScreen+1)%PUB_SCREENS.length;pubDraw()},14000);
+  pubTimer=setInterval(()=>{pubScreen=(pubScreen+1)%PUB_SCREENS.length;pubDraw()},sys()==='league'?3000:14000);
   if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{});
 }
 function pubDraw(){
   const el=document.getElementById('public');if(!el)return;
+  if(sys()==='league'){el.innerHTML=`<div class="public"><h1><span>${esc(S.settings.name)}</span><button class="ghost" style="color:#fff;font-size:16px" onclick="closePublic()">✕ סגור</button></h1>${lgCourts()}</div>`;return}
   const now=Date.now();const busy=busyPids();
   const q=pendingMatches().filter(m=>!matchPids(m).some(id=>busy.has(id))).map(m=>({m,...priority(m,now)}));
   q.forEach(x=>delete x.m._rest);q.sort((a,b)=>b.sc-a.sc);
