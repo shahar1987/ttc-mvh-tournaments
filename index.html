@@ -536,7 +536,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-11-01.3';
+const APP_VER='2026-11-01.4';
 let verTag=null;
 // קודם בודקים רק את הכותרות (כמה בתים); את הדף כולו (230KB) מורידים רק כשהוא באמת השתנה
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname,{method:'HEAD',cache:'no-store'}).then(r=>{const tag=r.headers.get('etag')||r.headers.get('last-modified');if(tag&&tag===verTag)return;verTag=tag;fullCheck()}).catch(()=>{})}
@@ -1254,13 +1254,22 @@ function dashTab(){
     <button onclick="goto('players')">👥 שחקנים (יציאה מהתחרות)</button>
     ${S.settings.publicLink?`<button onclick="navigator.clipboard.writeText(viewLink()).then(()=>toast('הקישור הועתק'))">🔗 העתקת קישור הצפייה</button>`:''}
   </div>`}
+function queueOrder(now){const q=[];const busy=busyPids();
+  for(const m of pendingMatches()){const pr=priority(m,now);q.push({m,...pr,rest:pr.why.includes('במנוחה'),busy:matchPids(m).some(id=>busy.has(id))})}
+  return q.sort((a,b)=>(a.busy-b.busy)||(b.sc-a.sc))}
+// שוויצרית: הסיבוב הבא נקבע לפי התוצאות, לכן כשאין משחק בתור מראים כמה משחקים נשארו עד שהוא יוגרל
+function swissWait(){if(sys()!=='swiss'||S.koBuilt)return '';const ms=S.matches.filter(m=>m.stage==='swiss'&&!m.bye);const left=ms.filter(m=>m.status!=='done').length;const r=swissRoundsDone();
+  if(!left||r>=S.settings.swissRounds)return '';return `סיבוב ${r+1} יוגרל כשיסתיימו ${left===1?'המשחק האחרון':'עוד '+left+' משחקים'}`}
+// מחסנית "הבא בתור" לשוויצרית: המשחק שעולה לשולחן הפנוי הבא נמצא ראשון
+function swissStack(){const q=queueOrder(Date.now());const w=swissWait();if(!q.length&&!w)return '';
+  return `<div class="card" style="margin-bottom:12px"><h2 style="margin-bottom:8px">הבא בתור</h2>
+  ${q.length?`<ul class="queue">${q.map((x,i)=>`<li ${x.busy?'style="opacity:.5"':''}><div class="who">${i===0&&!x.busy?'<b>הבא: </b>':''}${esc(sideName(x.m,1))} – ${esc(sideName(x.m,2))}<div class="why">${x.busy?'מחכה שאחד מהם יסיים':'לשולחן הפנוי הבא'}</div></div></li>`).join('')}</ul>`:''}
+  ${w?`<div class="muted" style="margin-top:${q.length?8:0}px">${esc(w)}</div>`:''}</div>`}
 function tablesTab(){
   const now=Date.now();const bo=S.koBuilt?S.settings.boKO:S.settings.boGroup;const avg=avgDuration(bo);
   const groupPhase=!S.koBuilt;
   const freeCount=S.tables.filter(t=>!t.matchId).length;
-  const q=[];const busy=busyPids();
-  for(const m of pendingMatches()){const pr=priority(m,now);q.push({m,...pr,rest:pr.why.includes('במנוחה'),busy:matchPids(m).some(id=>busy.has(id))})}
-  q.sort((a,b)=>(a.busy-b.busy)||(b.sc-a.sc));
+  const q=queueOrder(now);
   return `
   <div class="row" style="justify-content:space-between;margin-bottom:10px">
     <div class="row">
@@ -1292,7 +1301,7 @@ function tablesTab(){
   ${q.length?`<ul class="queue">${q.slice(0,40).map(x=>{const m=x.m;const i1=mins(now-idleSince(sideIds(m,1)[0])),i2=mins(now-idleSince(sideIds(m,2)[0]));const cls=v=>v>=30?'idle-bad':v>=20?'idle-warn':'';
     return `<li style="--gc:${m.stage==='group'?gcolor(m.groupId):'var(--ball)'}" draggable="${x.busy?'false':'true'}" ondragstart="event.dataTransfer.setData('m','${ja(m.id)}')" ${x.busy?'style="opacity:.5"':''}>
       <div class="who"><span class="${cls(i1)}">${esc(sideName(m,1))}</span> – <span class="${cls(i2)}">${esc(sideName(m,2))}</span><div class="why">${esc(matchLabel(m))} · ${esc(x.why.filter(w=>w!=='במנוחה').join(' · '))}${x.busy?' · אחד מהם משחק עכשיו':''}</div></div>
-      ${x.rest?'<span class="rest">במנוחה</span>':''}</li>`}).join('')}${q.length>40?`<li class="tiny">ועוד ${q.length-40} משחקים</li>`:''}</ul>`:`<div class="card muted">אין משחקים ממתינים${S.tables.some(t=>t.matchId)?'. מחכים שהשולחנות יתפנו.':'.'}</div>`}
+      ${x.rest?'<span class="rest">במנוחה</span>':''}</li>`}).join('')}${q.length>40?`<li class="tiny">ועוד ${q.length-40} משחקים</li>`:''}</ul>`:`<div class="card muted">${swissWait()||`אין משחקים ממתינים${S.tables.some(t=>t.matchId)?'. מחכים שהשולחנות יתפנו.':'.'}`}</div>`}
   </aside></div>`;
 }
 function matchLabel(m){
@@ -1580,7 +1589,7 @@ function swissMaxRounds(n){return Math.max(1,n-1)}
 function fallbackPair(pool){const out=[];for(let i=0;i<pool.length-1;i+=2)out.push([pool[i],pool[i+1]]);return out}
 function swissTab(){
   const st=swissStandings();const r=swissRoundsDone();const ms=S.matches.filter(m=>m.stage==='swiss');
-  return `<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה</h2><span class="tiny">סיבוב ${r} מתוך ${esc(S.settings.swissRounds)}</span></div>
+  return `${swissStack()}<div class="card"><div class="row" style="justify-content:space-between"><h2>טבלה</h2><span class="tiny">סיבוב ${r} מתוך ${esc(S.settings.swissRounds)}</span></div>
   <div style="overflow-x:auto"><table class="st"><tr><th>#</th><th style="text-align:right">שם</th><th>מש׳</th><th>נצ׳</th><th>הפ׳</th><th>נק׳</th><th>בוכהולץ</th><th>מערכות</th><th>נקודות</th></tr>
   ${st.map((x,i)=>`<tr data-pid="${esc(x.id)}" class="${S.settings.swissKO&&i<S.settings.swissAdvance?'q':''}"><td>${i+1}</td><td class="name">${esc(pname(x.id))}</td><td>${x.played}</td><td>${x.w}</td><td>${x.l}</td><td><b>${x.mp}</b></td><td>${x.buch}</td><td>${x.sw}:${x.sl}</td><td>${esc(x.pw)}:${esc(x.pl)}</td></tr>`).join('')}</table></div>
   <p class="tiny" style="margin-top:8px">בוכהולץ = סכום נקודות המשחק של כל היריבים שלך — שובר השוויון המקובל בשיטה השוויצרית.</p></div>
