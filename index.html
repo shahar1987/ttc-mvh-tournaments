@@ -497,7 +497,9 @@ table.st th{font-size:max(.82em,13px)}
 .lg-score .n{font-family:"Assistant",sans-serif;font-weight:800;font-variant-numeric:tabular-nums;font-size:clamp(34px,5vw,48px);color:var(--act);line-height:1.1}
 .lg-score .n.win{color:var(--ok)}
 .lg-game{padding:12px 14px}
-.lg-game.off{opacity:.45}
+.lg-game.wait{opacity:.55}
+.lg-game h3 .tag:empty{display:none}
+.lg-game.open{border-color:var(--act);box-shadow:0 0 0 3px rgba(59,90,127,.12)}
 .lg-game h3{font-size:1em;margin:0 0 8px;display:flex;justify-content:space-between;gap:8px}
 .lg-game h3 .tag{font-weight:600;color:var(--ok)}
 .lg-row{display:grid;grid-template-columns:minmax(70px,1fr) repeat(5,minmax(40px,48px)) 34px;gap:6px;align-items:center;padding:4px 0}
@@ -534,7 +536,7 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-11-01.1';
+const APP_VER='2026-11-01.2';
 function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
@@ -1960,7 +1962,7 @@ function resetAll(){if(!confirm('לאפס את כל הנתונים של התחר
 // shortcut: הסגל קבוע בקוד, לעדכן כאן כשמצטרף שחקן
 const LEAGUE_ROSTER=['עדי לוי','אלעזר שנקר','יבגני ז\'וטובסקי','עומר סיטון','דניאל בן אהרון','דור נברו','אביב לזר'];
 const LG_ORDER=[null,[0,1],[1,0],[2,2],[0,0],[2,1],[1,2]]; // [אינדקס מארחת, אינדקס אורחת]; null = זוגות
-function lgFresh(){return {opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]}))}}
+function lgFresh(){return {step:'lineup',usName:'הפועל מבואות חרמון M1',opp:'',home:true,time:'',mid:'',us:['','',''],usD:['',''],them:['','',''],themD:['',''],games:LG_ORDER.map(()=>({sets:[]})),closed:[]}}
 function lgL(){if(!S.league)S.league=lgFresh();return S.league}
 function lgSetsWon(g){let h=0,a=0;(g.sets||[]).forEach(s=>{if(s&&validSet(s[0],s[1])){if(s[0]>s[1])h++;else a++}});return [h,a]}
 function lgGameWinner(g){const [h,a]=lgSetsWon(g);return h>=3?0:a>=3?1:null}
@@ -1971,59 +1973,71 @@ function lgSideName(side,gi){const o=LG_ORDER[gi];const n=lgNames(side);if(!o)re
 // ת"ז של השחקנים שלנו נשמרות רק במכשיר הזה (localStorage), לא בענן ולא בטופס המשותף
 function lgTZ(){try{return JSON.parse(localStorage.getItem(KEY+'.tz')||'{}')}catch(e){return {}}}
 function lgTZSet(name,v){const m=lgTZ();if(v)m[name]=v;else delete m[name];try{localStorage.setItem(KEY+'.tz',JSON.stringify(m))}catch(e){}}
-function renderLeague(app){
-  const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=sc[us?'a':'h'],theirs=sc[us?'h':'a'];
+const LG_ROUNDS=[[0],[1,2,3],[4,5,6]]; // זוגות לבד, ואז שלושה יחידים במקביל על שלושה שולחנות
+// משחק פתוח: לא נסגר, וכל המשחקים בסבבים שלפניו כבר הוכרעו. משחק שנפתח מחדש לתיקון נשאר פתוח גם אחרי סוף המפגש
+function lgOpen(){const L=lgL();const cl=L.closed||[];const done=lgTeamScore().done;
+  return L.games.map((g,gi)=>gi).filter(gi=>{if(cl.includes(gi))return false;if(done)return L.games[gi].sets.some(Boolean);const r=LG_ROUNDS.findIndex(x=>x.includes(gi));return LG_ROUNDS.slice(0,r).flat().every(j=>lgGameWinner(L.games[j])!==null)})}
+function renderLeague(app){const L=lgL();app.innerHTML='';(L.step==='form'?renderLeagueForm:renderLeagueLineup)(app)}
+function renderLeagueLineup(app){
+  const L=lgL();const us=L.home?0:1,them=1-us;
   const tz=lgTZ();const dl=`<datalist id="lgRoster">${LEAGUE_ROSTER.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
   const pick=(arr,i,ch)=>`<select onchange="${ch}">${['',...arr.filter(Boolean)].map(n=>`<option value="${esc(n)}" ${n===(arr===L.us?L.usD:L.themD)[i]?'selected':''}>${esc(n)||'—'}</option>`).join('')}</select>`;
+  const ready=L.opp&&L.us.every(Boolean)&&L.them.every(Boolean)&&L.usD.every(Boolean)&&L.themD.every(Boolean);
   app.innerHTML=`${dl}<h1>משחק ליגה לאומית</h1>
   <div class="card stack">
     <div class="grid2">
+      <div><label>הקבוצה שלנו</label><input value="${esc(L.usName)}" onchange="lgMeta('usName',this.value)"></div>
       <div><label>קבוצה יריבה</label><input id="lg_opp" value="${esc(L.opp)}" placeholder="למשל: הפועל חיפה M2" onchange="lgMeta('opp',this.value)"></div>
-      <div><label>מגרש</label><div class="seg"><button class="${L.home?'on':''}" onclick="lgMeta('home',true)">בית</button><button class="${L.home?'':'on'}" onclick="lgMeta('home',false)">חוץ</button></div></div>
     </div>
     <div class="grid2">
+      <div><label>מגרש</label><div class="seg"><button class="${L.home?'on':''}" onclick="lgMeta('home',true)">בית</button><button class="${L.home?'':'on'}" onclick="lgMeta('home',false)">חוץ</button></div></div>
       <div><label>תאריך</label><input type="date" value="${esc(S.settings.date)}" onchange="lgMeta('date',this.value)"></div>
       <div><label>שעה</label><input type="time" value="${esc(L.time)}" onchange="lgMeta('time',this.value)"></div>
       <div><label>מספר משחק באתר האיגוד</label><input inputmode="numeric" value="${esc(L.mid)}" onchange="lgMeta('mid',this.value)"></div>
     </div>
   </div>
   <div class="card lg-lineup stack">
-    <h2>ההרכב שלנו <span class="tiny">${us===0?'A, B, C':'X, Y, Z'}</span></h2>
+    <h2>${esc(L.usName)} <span class="tiny">${us===0?'A, B, C':'X, Y, Z'}</span></h2>
     ${[0,1,2].map(i=>`<div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">${lgLetter(us,i)}</b><input list="lgRoster" value="${esc(L.us[i])}" placeholder="שם" onchange="lgName('us',${i},this.value)"><input class="lg-tz" inputmode="numeric" value="${esc(tz[L.us[i]]||'')}" placeholder="ת&quot;ז" ${L.us[i]?'':'disabled'} onchange="lgTZSet('${ja(L.us[i])}',this.value.trim())"></div>`).join('')}
     <div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">זוג</b>${pick(L.us,0,"lgName('usD',0,this.value)")}${pick(L.us,1,"lgName('usD',1,this.value)")}</div>
     <h2 style="margin-top:18px">${esc(L.opp)||'היריבה'} <span class="tiny">${them===0?'A, B, C':'X, Y, Z'}</span></h2>
     ${[0,1,2].map(i=>`<div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">${lgLetter(them,i)}</b><input value="${esc(L.them[i])}" placeholder="שם" onchange="lgName('them',${i},this.value)"></div>`).join('')}
     <div class="row"><b style="flex:0 0 auto;width:28px;text-align:center">זוג</b>${pick(L.them,0,"lgName('themD',0,this.value)")}${pick(L.them,1,"lgName('themD',1,this.value)")}</div>
   </div>
-  <div class="card"><div class="lg-score"><div>הפועל מבואות חרמון<div class="n" id="lgUs">${ours}</div></div><div>:</div><div>${esc(L.opp)||'היריבה'}<div class="n" id="lgThem">${theirs}</div></div></div><div class="tiny" id="lgStatus" style="text-align:center;margin-top:6px"></div></div>
-  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות';
+  <div class="row" style="margin-top:18px"><button class="primary big" style="flex:1 1 200px" ${ready?'':'disabled'} onclick="lgMeta('step','form')">בנה טופס</button>${canDelete()?'<button class="danger" onclick="deleteTournament()">מחיקה</button>':''}</div>`;
+}
+function renderLeagueForm(app){
+  const L=lgL();const us=L.home?0:1,them=1-us;const sc=lgTeamScore();const ours=sc[us?'a':'h'],theirs=sc[us?'h':'a'];const open=lgOpen(),cl=L.closed||[];
+  app.innerHTML=`<div class="row" style="justify-content:space-between"><h1>${esc(L.usName)} – ${esc(L.opp)}</h1><button class="ghost" onclick="lgMeta('step','lineup')">הרכב</button></div>
+  <div class="tiny">${L.home?'בית':'חוץ'}${L.time?' · '+esc(L.time):''}${L.mid?' · משחק '+esc(L.mid):''}</div>
+  <div class="card" style="margin-top:12px"><div class="lg-score"><div>${esc(L.usName)}<div class="n" id="lgUs">${ours}</div></div><div>:</div><div>${esc(L.opp)}<div class="n" id="lgThem">${theirs}</div></div></div><div class="tiny" id="lgStatus" style="text-align:center;margin-top:6px"></div></div>
+  <div class="stack" style="margin-top:14px">${L.games.map((g,gi)=>{const o=LG_ORDER[gi];const title=`${gi+1} · ${o?`${lgLetter(us,o[us])}–${lgLetter(them,o[them])}`:'זוגות'}`;
+    if(!open.includes(gi)){const w=lgGameWinner(g);const [h,a]=lgSetsWon(g);const mine=us===0?[h,a]:[a,h];
+      return `<div class="card lg-game ${cl.includes(gi)?'':'wait'}"><h3><span>${title}</span><span class="tag">${w===null?'':w===us?'ניצחון':'הפסד'}</span></h3><div class="row" style="justify-content:space-between"><span class="nm">${esc(lgSideName(us,gi))} <b>נגד</b> ${esc(lgSideName(them,gi))}</span>${cl.includes(gi)||w!==null?`<span class="sw">${mine[0]}:${mine[1]}</span><button class="ghost" onclick="lgReopen(${gi})">פתח</button>`:''}</div></div>`}
     const row=(side,r)=>`<div class="lg-row" data-g="${gi}" data-r="${r}"><div class="nm">${esc(lgSideName(side,gi))}</div>${[0,1,2,3,4].map(k=>{const s=g.sets[k];const v=s?s[side]:null;return `<input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" value="${v==null?'':v}" data-g="${gi}" data-k="${k}" data-r="${r}" oninput="lgInput(this)" onchange="lgChange()" onfocus="this.select()">`}).join('')}<div class="sw"></div></div>`;
-    return `<div class="card lg-game" data-game="${gi}"><h3><span>${gi+1} · ${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}</div>`}).join('')}</div>
-  ${canDelete()?'<div class="row" style="margin-top:18px"><button class="danger" onclick="deleteTournament()">מחיקת המשחק</button></div>':''}`;
+    return `<div class="card lg-game open" data-game="${gi}"><h3><span>${title}</span><span class="tag"></span></h3>${row(us,0)}${row(them,1)}<div class="row" style="margin-top:8px"><button class="primary" id="lgDone${gi}" onclick="lgClose(${gi})">סיום המשחק</button></div></div>`}).join('')}</div>`;
   lgRefresh();
 }
 function lgMeta(k,v){const L=lgL();if(k==='date')S.settings.date=v;else L[k]=v;S.settings.name=(L.home?'בית':'חוץ')+(L.opp?' מול '+L.opp:'')+' · ליגה לאומית';commit()}
 function lgName(k,i,v){const L=lgL();v=v.trim();L[k][i]=v;if(k==='us'||k==='them'){const d=L[k+'D'];d.forEach((n,j)=>{if(n&&!L[k].includes(n))d[j]=''})}commit()}
+function lgClose(gi){lgChange();const L=lgL();if(lgGameWinner(L.games[gi])===null)return;L.closed=[...new Set([...(L.closed||[]),gi])];commit()}
+function lgReopen(gi){const L=lgL();L.closed=(L.closed||[]).filter(x=>x!==gi);commit()}
 function lgInput(inp){inp.value=inp.value.replace(/\D/g,'').slice(0,2);const v=inp.value===''?null:+inp.value;
   const other=document.querySelector(`input[data-g="${inp.dataset.g}"][data-k="${inp.dataset.k}"][data-r="${1-inp.dataset.r}"]`);inp.dataset.auto='0';
   if(v!==null){const ov=other.value===''?null:+other.value;if(ov===null||!validSet(v,ov)||(ov<v&&v<=10)||(other.dataset.auto!=='0'&&!(v===11&&ov<=9))){other.value=otherScore(v);other.dataset.auto='1'}}
   if(v===null&&other.dataset.auto!=='0')other.value='';
   if(inp.value!==''&&(inp.value.length===2||inp.value!=='1')){const n=document.querySelector(`input[data-g="${inp.dataset.g}"][data-k="${+inp.dataset.k+1}"][data-r="${inp.dataset.r}"]`);if(n&&!n.disabled)n.focus()}
   lgRefresh()}
-// קורא את כל המערכות מהמסך לתוך המצב ושומר, בלי רינדור מחדש (כדי לא לאבד את הפוקוס בזמן ההקלדה)
-function lgChange(){const L=lgL();const us=L.home?0:1;
-  L.games.forEach((g,gi)=>{g.sets=[0,1,2,3,4].map(k=>{const a=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="0"]`),b=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="1"]`);if(a.value===''&&b.value==='')return null;const o=[+a.value,+b.value];return us===0?o:[o[1],o[0]]})});
-  save();lgRefresh()}
-function lgRefresh(){const L=lgL();const us=L.home?0:1;
-  // המצב המוצג מחושב מהמסך (לא מהמצב השמור), כך שמספרים שעוד לא נשמרו כבר נספרים
-  const live=L.games.map((g,gi)=>({sets:[0,1,2,3,4].map(k=>{const a=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="0"]`),b=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="1"]`);if(!a||(a.value===''&&b.value===''))return null;const o=[+a.value,+b.value];return us===0?o:[o[1],o[0]]})}));
+// המערכות של המשחקים הפתוחים נקראות מהמסך (מספרים שעוד לא נשמרו כבר נספרים); שאר המשחקים מהמצב השמור
+function lgLive(){const L=lgL();const us=L.home?0:1;return L.games.map((g,gi)=>{if(!document.querySelector(`input[data-g="${gi}"]`))return g;return {sets:[0,1,2,3,4].map(k=>{const a=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="0"]`),b=document.querySelector(`input[data-g="${gi}"][data-k="${k}"][data-r="1"]`);if(a.value===''&&b.value==='')return null;const o=[+a.value,+b.value];return us===0?o:[o[1],o[0]]})}})}
+function lgChange(){lgL().games=lgLive();save();lgRefresh()} // שמירה בלי רינדור מחדש, כדי לא לאבד את הפוקוס בזמן ההקלדה
+function lgRefresh(){const L=lgL();const us=L.home?0:1;const live=lgLive();
   let ours=0,theirs=0;const won=live.map(g=>{const w=lgGameWinner(g);if(w!==null){if(w===us)ours++;else theirs++}return w});const done=ours>=4||theirs>=4;
-  live.forEach((g,gi)=>{const card=document.querySelector(`.lg-game[data-game="${gi}"]`);const [h,a]=lgSetsWon(g);const w=won[gi];const mine=us===0?[h,a]:[a,h];
+  live.forEach((g,gi)=>{const card=document.querySelector(`.lg-game[data-game="${gi}"]`);if(!card)return;const [h,a]=lgSetsWon(g);const w=won[gi];const mine=us===0?[h,a]:[a,h];
     card.querySelectorAll('.lg-row').forEach((r,i)=>{r.querySelector('.sw').textContent=mine[i];r.classList.toggle('win',w!==null&&(w===us)===(i===0))});
     card.querySelector('.tag').textContent=w===null?'':(w===us?'ניצחון':'הפסד');
-    const empty=g.sets.every(s=>!s);card.classList.toggle('off',done&&w===null&&empty);
-    card.querySelectorAll('input').forEach(inp=>{const k=+inp.dataset.k;const s=g.sets[k];const blank=!s;inp.disabled=(w!==null&&blank)||(done&&w===null&&empty);
-      inp.classList.toggle('bad',!!s&&!validSet(s[0],s[1])&&inp.value!=='')})});
+    document.getElementById('lgDone'+gi).disabled=w===null;
+    card.querySelectorAll('input').forEach(inp=>{const s=g.sets[+inp.dataset.k];inp.disabled=w!==null&&!s;inp.classList.toggle('bad',!!s&&!validSet(s[0],s[1])&&inp.value!=='')})});
   document.getElementById('lgUs').textContent=ours;document.getElementById('lgThem').textContent=theirs;
   document.getElementById('lgUs').classList.toggle('win',done&&ours>theirs);document.getElementById('lgThem').classList.toggle('win',done&&theirs>ours);
   document.getElementById('lgStatus').textContent=done?(ours>theirs?'ניצחנו':'הפסדנו')+' · המפגש הסתיים':'';
