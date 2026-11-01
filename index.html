@@ -536,8 +536,11 @@ table.st th{font-size:max(.82em,13px)}
 /* ========================= STATE ========================= */
 const KEY='tenlishulchan.v1';
 // עדכון אוטומטי: מכשיר שמחזיק גרסה ישנה (אייקון במסך הבית, לשונית פתוחה) נטען מחדש לבד כשעולה גרסה חדשה, רק כשאין חלון פתוח
-const APP_VER='2026-11-01.2';
-function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
+const APP_VER='2026-11-01.3';
+let verTag=null;
+// קודם בודקים רק את הכותרות (כמה בתים); את הדף כולו (230KB) מורידים רק כשהוא באמת השתנה
+function checkUpdate(){if(document.querySelector('#modal .modal'))return;fetch(location.pathname,{method:'HEAD',cache:'no-store'}).then(r=>{const tag=r.headers.get('etag')||r.headers.get('last-modified');if(tag&&tag===verTag)return;verTag=tag;fullCheck()}).catch(()=>{})}
+function fullCheck(){fetch(location.pathname+'?ts='+Date.now(),{cache:'no-store'}).then(r=>r.text()).then(t=>{const v=(t.match(/APP_VER='([^']+)'/)||[])[1];if(v&&v!==APP_VER&&!document.querySelector('#modal .modal'))location.reload()}).catch(()=>{})}
 setInterval(checkUpdate,60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
 const CLUB_NAME='מועדון טניס שולחן מבואות החרמון ע"ש רוני גלבוע';
 const GROUP_COLORS=['#2E7D6B','#3B5A7F','#B24B41','#6B5B95','#9A6B18','#2F7F86','#9A4F76','#5B7340','#4E6E95','#7A6450'];
@@ -2059,10 +2062,13 @@ window.addEventListener('fb-ready',()=>{
   if(VIEW){FB.onSnapshot(FB.doc(FB.db,'tournamentsPublic',VIEW),snap=>{if(!snap.exists()||!snap.data().state){document.getElementById('app').innerHTML='<div class="card login"><h2>הקישור לא פעיל</h2><p class="muted">התחרות לא פתוחה לצפייה כרגע.</p></div>';return}
       try{S=Object.assign(fresh(),JSON.parse(snap.data().state));render()}catch(e){console.error(e)}},e=>{console.error(e);document.getElementById('app').innerHTML='<div class="card login"><h2>אין גישה</h2></div>'});return}
   FB.onAuthStateChanged(FB.auth,async u=>{USER=u;PROFILE=null;
-    if(u){try{const d=await FB.getDoc(FB.doc(FB.db,'users',u.uid));PROFILE=d.exists()?d.data():null}catch(e){PROFILE=null}}
+    const PK=KEY+'.profile.'+(u&&u.uid);let cached=null;if(u)try{cached=JSON.parse(localStorage.getItem(PK)||'null')}catch(e){}
+    // הפרופיל מהמכשיר מאפשר להיכנס מיד; הגרסה מהענן מתעדכנת ברקע (וכללי Firestore אוכפים הרשאות בכל מקרה)
+    const fetchP=u?FB.getDoc(FB.doc(FB.db,'users',u.uid)).then(d=>{const p=d.exists()?d.data():null;try{localStorage.setItem(PK,JSON.stringify(p))}catch(e){}return p}).catch(()=>cached):null;
+    if(u){if(cached){PROFILE=cached;fetchP.then(p=>{if(USER===u&&JSON.stringify(p)!==JSON.stringify(PROFILE)){PROFILE=p;if(!p){closeTournament(true)}render()}})}else PROFILE=await fetchP}
     if(unsubList){unsubList();unsubList=null}
     closeTournament(true);
-    if(u&&PROFILE){watchList();
+    if(u&&PROFILE){if(!unsubList)watchList();
       // רענון או עדכון גרסה: חוזרים לתחרות שהייתה פתוחה במכשיר הזה, לא לרשימה
       let last=null;try{last=localStorage.getItem(KEY+'.last')}catch(e){}if(last){openTournament(last);return}}
     render();});
@@ -2120,19 +2126,20 @@ async function openTournament(id){
   localView=!!cached;lastSig=stSig();try{localStorage.setItem(KEY+'.last',id)}catch(e){}
   CLOUD_REV=null;try{const b=localStorage.getItem(KEY+'.'+id+'.base');if(b!==null&&b!==''&&!isNaN(+b))CLOUD_REV=+b}catch(e){}
   const ref=FB.doc(FB.db,'tournaments',id);
+  if(unsubList){unsubList();unsubList=null}
   if(unsubT)unsubT();
   unsubT=FB.onSnapshot(ref,snap=>{
     if(!snap.exists()){if(id===PENDING_NEW)return;closeTournament();toast('התחרות נמחקה');return}
-    const d=snap.data();if(!d.state)return;
+    const d=snap.data();if(!d.state)return;const cache=!!(snap.metadata&&snap.metadata.fromCache);
     if(d.client===CLIENT&&(d.rev||0)<=(S.rev||0))return;
     if((d.rev||0)>=(S.rev||0)&&syncState!=='pending'&&syncState!=='saving'){try{applyCloud(id,d.state,Math.max(S.rev||0,d.rev||0),d.rev||0)}catch(e){console.error(e)}}
-    else if((d.rev||0)<(S.rev||0)){scheduleCloud()}
-    setSync('saved');
+    else if((d.rev||0)<(S.rev||0)&&!cache){scheduleCloud()}
+    if(!cache)setSync('saved');
   },e=>{console.error(e);syncErr=e;setSync('error');
     if(!warnedOnce){warnedOnce=true;toast('אין גישה לענן. עובדים מהמכשיר.',{label:'בדיקה',fn:diagnostics})}});
   render();
 }
-function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent){try{localStorage.removeItem(KEY+'.last')}catch(e){}render()}}
+function closeTournament(silent){if(unsubT){unsubT();unsubT=null}if(!unsubList&&USER&&PROFILE&&!VIEW)watchList();if(cloudT){clearTimeout(cloudT);pushCloud()}TID=null;S=fresh();if(!silent){try{localStorage.removeItem(KEY+'.last')}catch(e){}render()}}
 // מצב מהענן: הלשונית והמסך נשארים של המכשיר הזה; חלון תוצאה פתוח נסגר רק אם המשחק שבו השתנה; מה שמוקלד במסך נשאר
 let localView=false,openMid=null;
 function applyCloud(tid,state,rev,base){
@@ -2388,9 +2395,9 @@ render();
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,setPersistence,browserLocalPersistence} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import {getFirestore,doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {getFirestore,initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDhPiyIrP1zOu5bNSpsQDyXFgZBP6rV7vo",authDomain:"ttcmh-2a752.firebaseapp.com",projectId:"ttcmh-2a752",storageBucket:"ttcmh-2a752.firebasestorage.app",messagingSenderId:"198162387540",appId:"1:198162387540:web:f4c4728a39aed9468c13c1"};
-const app=initializeApp(cfg);const auth=getAuth(app);const db=getFirestore(app);
+const app=initializeApp(cfg);const auth=getAuth(app);let db;try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){db=getFirestore(app)}
 setPersistence(auth,browserLocalPersistence).catch(()=>{});
 window.FB={auth,db,onAuthStateChanged,signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),signOut:()=>signOut(auth),doc,collection,onSnapshot,setDoc,getDoc,getDocs,query,orderBy,deleteDoc,runTransaction};
 window.dispatchEvent(new Event('fb-ready'));
